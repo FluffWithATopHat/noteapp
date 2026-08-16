@@ -3,7 +3,7 @@ import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert, ActivityIndi
 import { useFocusEffect } from '@react-navigation/native';
 import NoteCard from '../components/NoteCard';
 import { useTheme } from '../context/ThemeContext';
-import { deleteNote, getNotes, markNoteComplete, updateNote } from '../services/storageService';
+import { deleteNote, getNotes, updateNote } from '../services/storageService';
 import { exportAllNotes, exportSingleNote } from '../services/fileService';
 import { cancelNoteNotifications } from '../services/notificationService';
 
@@ -54,11 +54,12 @@ export default function HomeScreen({ navigation }) {
 
   const handleToggleComplete = async (note, completed) => {
     try {
-      await markNoteComplete(note.id, completed);
       if (completed) {
-        // Cancel pending notifications when marked done
-        await cancelNoteNotifications(note);
+        // Cancel notifications first (best-effort), then persist the single update
+        try { await cancelNoteNotifications(note); } catch { /* ignored */ }
         await updateNote(note.id, { ...note, completed, reminderId: null, followUpId: null });
+      } else {
+        await updateNote(note.id, { ...note, completed });
       }
       await loadNotes();
     } catch (err) {

@@ -43,17 +43,13 @@ export default function App() {
     });
   }, []);
 
-  if (showSplash) {
-    return (
-      <ThemeProvider>
-        <SplashScreen onFinish={() => setShowSplash(false)} />
-      </ThemeProvider>
-    );
-  }
-
   return (
     <ThemeProvider>
-      <AppNavigator />
+      {showSplash ? (
+        <SplashScreen onFinish={() => setShowSplash(false)} />
+      ) : (
+        <AppNavigator />
+      )}
     </ThemeProvider>
   );
 }

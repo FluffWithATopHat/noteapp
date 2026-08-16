@@ -16,7 +16,11 @@ export default function NoteForm({
   const [title, setTitle] = useState(initialTitle);
   const [content, setContent] = useState(initialContent);
   const [isTask, setIsTask] = useState(initialIsTask);
-  const [dueAt, setDueAt] = useState(initialDueAt ? new Date(initialDueAt).toLocaleString() : '');
+  // Store dueAt as raw ISO string internally; display formatted to user
+  const [dueAt, setDueAt] = useState(initialDueAt || '');
+  const [dueAtDisplay, setDueAtDisplay] = useState(
+    initialDueAt ? new Date(initialDueAt).toLocaleString() : '',
+  );
   const [error, setError] = useState('');
 
   const hasChanges = useMemo(
@@ -24,15 +28,25 @@ export default function NoteForm({
       title.trim() !== initialTitle.trim() ||
       content.trim() !== initialContent.trim() ||
       isTask !== initialIsTask ||
-      dueAt !== (initialDueAt ? new Date(initialDueAt).toLocaleString() : ''),
+      dueAt !== (initialDueAt || ''),
     [content, initialContent, initialTitle, title, isTask, initialIsTask, dueAt, initialDueAt],
   );
 
   const parseDueAt = () => {
-    if (!dueAt.trim()) return null;
-    const d = new Date(dueAt.trim());
+    // dueAt is stored as ISO or raw user input
+    if (!dueAtDisplay.trim()) return null;
+    // If the stored dueAt is already a valid ISO, return it directly (no round-trip loss)
+    if (dueAt && !Number.isNaN(new Date(dueAt).getTime())) return dueAt;
+    const d = new Date(dueAtDisplay.trim());
     if (Number.isNaN(d.getTime())) return null;
     return d.toISOString();
+  };
+
+  const handleDueAtChange = (text) => {
+    setDueAtDisplay(text);
+    // Try to parse and store as ISO; fall back to raw text to allow further editing
+    const d = new Date(text.trim());
+    setDueAt(!Number.isNaN(d.getTime()) && text.trim() ? d.toISOString() : text.trim());
   };
 
   const handleSubmit = async () => {
@@ -44,8 +58,8 @@ export default function NoteForm({
       setError('Content is required.');
       return;
     }
-    if (isTask && dueAt.trim()) {
-      const d = new Date(dueAt.trim());
+    if (isTask && dueAtDisplay.trim()) {
+      const d = new Date(dueAtDisplay.trim());
       if (Number.isNaN(d.getTime())) {
         setError('Due date is not valid. Try "MM/DD/YYYY HH:MM" format.');
         return;
@@ -97,8 +111,8 @@ export default function NoteForm({
         <>
           <Text style={s.label}>Due Date (optional)</Text>
           <TextInput
-            value={dueAt}
-            onChangeText={setDueAt}
+            value={dueAtDisplay}
+            onChangeText={handleDueAtChange}
             style={s.input}
             placeholder="e.g. 08/20/2026 14:00"
             placeholderTextColor={theme.secondaryText}
