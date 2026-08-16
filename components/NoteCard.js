@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
+import { DEFAULT_CONTENT_FONT_SIZE } from '../constants/editor';
 import FormattedText from './FormattedText';
 
 function formatDate(dateString) {
@@ -50,7 +51,7 @@ export default function NoteCard({ note, onPress, onDelete, onExport, onToggleCo
         </Text>
         <FormattedText
           content={note.content}
-          fontSize={note.contentFontSize || 14}
+          fontSize={note.contentFontSize || DEFAULT_CONTENT_FONT_SIZE}
           numberOfLines={3}
           style={[styles.content, { color: theme.secondaryText }]}
         />

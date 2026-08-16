@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Alert, Text, StyleSheet } from 'react-native';
 import NoteForm from '../components/NoteForm';
 import { useTheme } from '../context/ThemeContext';
+import { DEFAULT_CONTENT_FONT_SIZE } from '../constants/editor';
 import { updateNote } from '../services/storageService';
 import { cancelNoteNotifications, scheduleNoteNotifications } from '../services/notificationService';
 
@@ -59,7 +60,7 @@ export default function EditNoteScreen({ route, navigation }) {
       <NoteForm
         initialTitle={note.title}
         initialContent={note.content}
-        initialContentFontSize={note.contentFontSize || 16}
+        initialContentFontSize={note.contentFontSize || DEFAULT_CONTENT_FONT_SIZE}
         initialIsTask={note.isTask || false}
         initialDueAt={note.dueAt || ''}
         submitLabel="Save Changes"

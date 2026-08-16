@@ -1,15 +1,13 @@
 import React, { useMemo, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Switch } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
+import { DEFAULT_CONTENT_FONT_SIZE, MAX_CONTENT_FONT_SIZE, MIN_CONTENT_FONT_SIZE } from '../constants/editor';
 import FormattedText from './FormattedText';
-
-const MIN_FONT_SIZE = 12;
-const MAX_FONT_SIZE = 28;
 
 export default function NoteForm({
   initialTitle = '',
   initialContent = '',
-  initialContentFontSize = 16,
+  initialContentFontSize = DEFAULT_CONTENT_FONT_SIZE,
   initialIsTask = false,
   initialDueAt = '',
   submitLabel,
@@ -56,7 +54,6 @@ export default function NoteForm({
     const start = selection.start ?? content.length;
     const end = selection.end ?? content.length;
     const lineStart = content.lastIndexOf('\n', start - 1) + 1;
-    const selectedText = content.slice(start, end);
     const lineEnd = end > start ? end : content.indexOf('\n', start);
     const safeLineEnd = lineEnd === -1 ? content.length : lineEnd;
     const segment = content.slice(lineStart, safeLineEnd);
@@ -66,15 +63,17 @@ export default function NoteForm({
       .join('\n');
 
     const nextContent = `${content.slice(0, lineStart)}${updatedSegment}${content.slice(safeLineEnd)}`;
-    const nextStart = lineStart + prefix.length;
-    const nextEnd = nextStart + selectedText.length;
+    const startShift = prefix.length * (segment.slice(0, Math.max(0, start - lineStart)).split('\n').length);
+    const endShift = prefix.length * (segment.slice(0, Math.max(0, end - lineStart)).split('\n').length);
+    const nextStart = start + startShift;
+    const nextEnd = end + endShift;
 
     setContent(nextContent);
     setSelection({ start: nextStart, end: nextEnd });
   };
 
   const changeFontSize = (delta) => {
-    setContentFontSize((current) => Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, current + delta)));
+    setContentFontSize((current) => Math.min(MAX_CONTENT_FONT_SIZE, Math.max(MIN_CONTENT_FONT_SIZE, current + delta)));
   };
 
   const parseDueAt = () => {

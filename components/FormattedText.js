@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { Platform, Text } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 
-const INLINE_TOKEN_REGEX = /(\*\*[^*]+\*\*|__[^_]+__|~~[^~]+~~|\*[^*]+\*|_[^_]+_|`[^`]+`)/g;
+const INLINE_TOKEN_REGEX = /(\*\*[^*]+\*\*|__[^_]+__|~~[^~]+~~|\*[^*]+\*|_[^_]+_|`[^`]+`)/;
 
 function getLineStyle(baseFontSize, level) {
   const sizeByLevel = {
