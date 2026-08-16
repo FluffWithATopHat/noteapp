@@ -1,0 +1,20 @@
+{
+  "expo": {
+    "name": "NoteApp",
+    "slug": "noteapp",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "platforms": [
+      "android"
+    ],
+    "android": {
+      "package": "com.fluffwithatophat.noteapp",
+      "permissions": [
+        "NOTIFICATIONS"
+      ]
+    },
+    "plugins": [
+      "expo-asset"
+    ]
+  }
+}
