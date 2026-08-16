@@ -1,28 +1,75 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import colors from '../constants/colors';
+import { useTheme } from '../context/ThemeContext';
 
 function formatDate(dateString) {
+  if (!dateString) return null;
   const date = new Date(dateString);
   return Number.isNaN(date.getTime()) ? 'Unknown date' : date.toLocaleString();
 }
 
-export default function NoteCard({ note, onPress, onDelete, onExport }) {
+function isOverdue(dueAt) {
+  if (!dueAt) return false;
+  return new Date(dueAt) < new Date();
+}
+
+export default function NoteCard({ note, onPress, onDelete, onExport, onToggleComplete }) {
+  const { theme } = useTheme();
+
+  const overdue = note.isTask && !note.completed && isOverdue(note.dueAt);
+
   return (
-    <View style={styles.container}>
-      <TouchableOpacity onPress={onPress}>
-        <Text style={styles.title}>{note.title}</Text>
-        <Text style={styles.content} numberOfLines={3}>
+    <View style={[
+      styles.container,
+      {
+        backgroundColor: note.completed ? theme.taskDoneBg : theme.surface,
+        borderColor: overdue ? theme.danger : theme.border,
+      },
+    ]}>
+      <TouchableOpacity onPress={onPress} activeOpacity={0.7}>
+        <View style={styles.titleRow}>
+          {note.isTask && (
+            <Text style={[styles.taskBadge, { backgroundColor: theme.primary + '22', color: theme.primary }]}>
+              ✅ Task
+            </Text>
+          )}
+          {overdue && (
+            <Text style={[styles.taskBadge, { backgroundColor: theme.badgeBg, color: theme.badgeText }]}>
+              ⚠️ Overdue
+            </Text>
+          )}
+          {note.completed && (
+            <Text style={[styles.taskBadge, { backgroundColor: theme.taskDoneBg, color: theme.taskDoneText }]}>
+              ✔ Done
+            </Text>
+          )}
+        </View>
+        <Text style={[styles.title, { color: note.completed ? theme.secondaryText : theme.primaryText }, note.completed && styles.strikethrough]}>
+          {note.title}
+        </Text>
+        <Text style={[styles.content, { color: theme.secondaryText }]} numberOfLines={3}>
           {note.content}
         </Text>
-        <Text style={styles.date}>Created: {formatDate(note.createdAt)}</Text>
+        <Text style={[styles.date, { color: theme.secondaryText }]}>Created: {formatDate(note.createdAt)}</Text>
+        {note.dueAt && (
+          <Text style={[styles.date, { color: overdue ? theme.danger : theme.secondaryText }]}>
+            Due: {formatDate(note.dueAt)}
+          </Text>
+        )}
       </TouchableOpacity>
       <View style={styles.actions}>
+        {note.isTask && (
+          <TouchableOpacity onPress={() => onToggleComplete && onToggleComplete(!note.completed)}>
+            <Text style={[styles.actionText, { color: note.completed ? theme.secondaryText : theme.taskDoneText }]}>
+              {note.completed ? 'Undo' : 'Done'}
+            </Text>
+          </TouchableOpacity>
+        )}
         <TouchableOpacity onPress={onExport}>
-          <Text style={styles.actionText}>Export</Text>
+          <Text style={[styles.actionText, { color: theme.primary }]}>Export</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={onDelete}>
-          <Text style={[styles.actionText, styles.deleteText]}>Delete</Text>
+          <Text style={[styles.actionText, { color: theme.danger }]}>Delete</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -31,24 +78,36 @@ export default function NoteCard({ note, onPress, onDelete, onExport }) {
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: colors.border,
     borderRadius: 12,
     padding: 14,
     marginBottom: 12,
   },
+  titleRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 4,
+  },
+  taskBadge: {
+    fontSize: 11,
+    fontWeight: '700',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 20,
+    overflow: 'hidden',
+  },
   title: {
-    color: colors.primaryText,
     fontSize: 16,
     fontWeight: '700',
   },
+  strikethrough: {
+    textDecorationLine: 'line-through',
+  },
   content: {
-    color: colors.secondaryText,
     marginTop: 6,
   },
   date: {
-    color: colors.secondaryText,
     marginTop: 8,
     fontSize: 12,
   },
@@ -59,10 +118,7 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   actionText: {
-    color: colors.primary,
     fontWeight: '700',
   },
-  deleteText: {
-    color: colors.danger,
-  },
 });
+

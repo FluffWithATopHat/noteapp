@@ -2,11 +2,13 @@ import React, { useCallback, useState } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import NoteCard from '../components/NoteCard';
-import colors from '../constants/colors';
-import { deleteNote, getNotes } from '../services/storageService';
+import { useTheme } from '../context/ThemeContext';
+import { deleteNote, getNotes, updateNote } from '../services/storageService';
 import { exportAllNotes, exportSingleNote } from '../services/fileService';
+import { cancelNoteNotifications } from '../services/notificationService';
 
 export default function HomeScreen({ navigation }) {
+  const { theme } = useTheme();
   const [notes, setNotes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -31,7 +33,7 @@ export default function HomeScreen({ navigation }) {
     }, [loadNotes]),
   );
 
-  const handleDelete = (noteId) => {
+  const handleDelete = (note) => {
     Alert.alert('Delete note?', 'This action cannot be undone.', [
       { text: 'Cancel', style: 'cancel' },
       {
@@ -39,7 +41,8 @@ export default function HomeScreen({ navigation }) {
         style: 'destructive',
         onPress: async () => {
           try {
-            await deleteNote(noteId);
+            await cancelNoteNotifications(note);
+            await deleteNote(note.id);
             await loadNotes();
           } catch (err) {
             Alert.alert('Error', err.message || 'Unable to delete note.');
@@ -47,6 +50,21 @@ export default function HomeScreen({ navigation }) {
         },
       },
     ]);
+  };
+
+  const handleToggleComplete = async (note, completed) => {
+    try {
+      if (completed) {
+        // Cancel notifications first (best-effort), then persist the single update
+        try { await cancelNoteNotifications(note); } catch { /* ignored */ }
+        await updateNote(note.id, { ...note, completed, reminderId: null, followUpId: null });
+      } else {
+        await updateNote(note.id, { ...note, completed });
+      }
+      await loadNotes();
+    } catch (err) {
+      Alert.alert('Error', err.message || 'Unable to update note.');
+    }
   };
 
   const handleExportAll = async () => {
@@ -66,22 +84,24 @@ export default function HomeScreen({ navigation }) {
     }
   };
 
+  const s = makeStyles(theme);
+
   return (
-    <View style={styles.screen}>
-      <View style={styles.row}>
-        <TouchableOpacity style={styles.primaryButton} onPress={() => navigation.navigate('AddNote')}>
-          <Text style={styles.primaryButtonText}>Add Note</Text>
+    <View style={s.screen}>
+      <View style={s.row}>
+        <TouchableOpacity style={s.primaryButton} onPress={() => navigation.navigate('AddNote')}>
+          <Text style={s.primaryButtonText}>+ Add Note</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.secondaryButton} onPress={handleExportAll} disabled={busy}>
-          <Text style={styles.secondaryButtonText}>{busy ? 'Working...' : 'Export All'}</Text>
+        <TouchableOpacity style={s.secondaryButton} onPress={handleExportAll} disabled={busy}>
+          <Text style={s.secondaryButtonText}>{busy ? 'Working...' : 'Export All'}</Text>
         </TouchableOpacity>
       </View>
 
       {loading ? (
-        <ActivityIndicator size="large" color={colors.primary} style={styles.loader} />
+        <ActivityIndicator size="large" color={theme.primary} style={s.loader} />
       ) : error ? (
-        <Text style={styles.error}>{error}</Text>
+        <Text style={s.error}>{error}</Text>
       ) : (
         <FlatList
           data={notes}
@@ -90,7 +110,8 @@ export default function HomeScreen({ navigation }) {
             <NoteCard
               note={item}
               onPress={() => navigation.navigate('EditNote', { note: item })}
-              onDelete={() => handleDelete(item.id)}
+              onDelete={() => handleDelete(item)}
+              onToggleComplete={(done) => handleToggleComplete(item, done)}
               onExport={async () => {
                 try {
                   await exportSingleNote(item);
@@ -101,64 +122,79 @@ export default function HomeScreen({ navigation }) {
               }}
             />
           )}
-          ListEmptyComponent={<Text style={styles.empty}>No notes yet. Tap “Add Note” to start.</Text>}
-          contentContainerStyle={notes.length === 0 ? styles.emptyContainer : undefined}
+          ListEmptyComponent={<Text style={s.empty}>No notes yet. Tap "+ Add Note" to start.</Text>}
+          contentContainerStyle={notes.length === 0 ? s.emptyContainer : undefined}
         />
       )}
+
+      <View style={s.footer}>
+        <Text style={s.footerText}>by TopHat</Text>
+      </View>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: colors.background,
-    padding: 16,
-  },
-  row: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 14,
-    gap: 8,
-  },
-  primaryButton: {
-    flex: 1,
-    backgroundColor: colors.primary,
-    borderRadius: 10,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  primaryButtonText: {
-    color: '#FFF',
-    fontWeight: '700',
-  },
-  secondaryButton: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: colors.primary,
-    borderRadius: 10,
-    paddingVertical: 12,
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-  },
-  secondaryButtonText: {
-    color: colors.primary,
-    fontWeight: '700',
-  },
-  loader: {
-    marginTop: 30,
-  },
-  error: {
-    color: colors.danger,
-    fontWeight: '600',
-    marginTop: 12,
-  },
-  emptyContainer: {
-    flexGrow: 1,
-    justifyContent: 'center',
-  },
-  empty: {
-    textAlign: 'center',
-    color: colors.secondaryText,
-  },
-});
+function makeStyles(theme) {
+  return StyleSheet.create({
+    screen: {
+      flex: 1,
+      backgroundColor: theme.background,
+      padding: 16,
+    },
+    row: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      marginBottom: 14,
+      gap: 8,
+    },
+    primaryButton: {
+      flex: 1,
+      backgroundColor: theme.primary,
+      borderRadius: 10,
+      paddingVertical: 12,
+      alignItems: 'center',
+    },
+    primaryButtonText: {
+      color: '#FFF',
+      fontWeight: '700',
+    },
+    secondaryButton: {
+      flex: 1,
+      borderWidth: 1,
+      borderColor: theme.primary,
+      borderRadius: 10,
+      paddingVertical: 12,
+      alignItems: 'center',
+      backgroundColor: theme.surface,
+    },
+    secondaryButtonText: {
+      color: theme.primary,
+      fontWeight: '700',
+    },
+    loader: {
+      marginTop: 30,
+    },
+    error: {
+      color: theme.danger,
+      fontWeight: '600',
+      marginTop: 12,
+    },
+    emptyContainer: {
+      flexGrow: 1,
+      justifyContent: 'center',
+    },
+    empty: {
+      textAlign: 'center',
+      color: theme.secondaryText,
+    },
+    footer: {
+      paddingVertical: 10,
+      alignItems: 'center',
+    },
+    footerText: {
+      color: theme.secondaryText,
+      fontSize: 12,
+      letterSpacing: 1,
+    },
+  });
+}

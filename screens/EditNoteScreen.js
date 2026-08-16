@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { View, Alert, Text, StyleSheet } from 'react-native';
 import NoteForm from '../components/NoteForm';
-import colors from '../constants/colors';
+import { useTheme } from '../context/ThemeContext';
 import { updateNote } from '../services/storageService';
+import { cancelNoteNotifications, scheduleNoteNotifications } from '../services/notificationService';
 
 export default function EditNoteScreen({ route, navigation }) {
+  const { theme } = useTheme();
   const [loading, setLoading] = useState(false);
   const note = route.params?.note;
 
@@ -15,7 +17,22 @@ export default function EditNoteScreen({ route, navigation }) {
 
     setLoading(true);
     try {
-      await updateNote(note.id, noteInput);
+      // If the note becomes a task or title changed, reschedule notifications
+      let reminderId = note.reminderId;
+      let followUpId = note.followUpId;
+
+      if (!note.completed) {
+        try {
+          await cancelNoteNotifications(note);
+          const ids = await scheduleNoteNotifications(noteInput.title);
+          reminderId = ids.reminderId;
+          followUpId = ids.followUpId;
+        } catch {
+          // Notifications optional
+        }
+      }
+
+      await updateNote(note.id, { ...noteInput, reminderId, followUpId });
       Alert.alert('Updated', 'Your note has been updated.', [
         {
           text: 'OK',
@@ -31,17 +48,19 @@ export default function EditNoteScreen({ route, navigation }) {
 
   if (!note) {
     return (
-      <View style={styles.screen}>
-        <Text style={styles.error}>Note not found.</Text>
+      <View style={[styles.screen, { backgroundColor: theme.background }]}>
+        <Text style={[styles.error, { color: theme.danger }]}>Note not found.</Text>
       </View>
     );
   }
 
   return (
-    <View style={styles.screen}>
+    <View style={[styles.screen, { backgroundColor: theme.background }]}>
       <NoteForm
         initialTitle={note.title}
         initialContent={note.content}
+        initialIsTask={note.isTask || false}
+        initialDueAt={note.dueAt || ''}
         submitLabel="Save Changes"
         loading={loading}
         onSubmit={handleSave}
@@ -55,10 +74,8 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     padding: 16,
-    backgroundColor: colors.background,
   },
   error: {
-    color: colors.danger,
     fontWeight: '600',
   },
 });
