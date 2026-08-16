@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { Platform, Text } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 
-const INLINE_MARKERS = ['**', '__', '~~', '`', '*', '_'];
+const INLINE_MARKERS = ['***', '___', '**', '__', '~~', '`', '*', '_'];
 
 function getLineStyle(baseFontSize, level) {
   const sizeByLevel = {
@@ -41,6 +41,10 @@ function getLineDescriptor(line, baseFontSize) {
 }
 
 function getInlineStyle(marker, theme) {
+  if (marker === '***' || marker === '___') {
+    return { fontWeight: '700', fontStyle: 'italic' };
+  }
+
   if (marker === '**' || marker === '__') {
     return { fontWeight: '700' };
   }
@@ -121,16 +125,23 @@ export default function FormattedText({ content, fontSize = 16, style, numberOfL
         nodes.push('\n');
       }
 
+      if (!segments.length) {
+        if (prefix) {
+          nodes.push(
+            <Text key={`prefix-${lineIndex}`} style={lineStyle}>
+              {prefix}
+            </Text>,
+          );
+        }
+        return;
+      }
+
       if (prefix) {
         nodes.push(
           <Text key={`prefix-${lineIndex}`} style={lineStyle}>
             {prefix}
           </Text>,
         );
-      }
-
-      if (!segments.length) {
-        return;
       }
 
       segments.forEach((segment, segmentIndex) => {

@@ -63,10 +63,11 @@ export default function NoteForm({
       .split('\n')
       .map((line) => `${prefix}${line}`)
       .join('\n');
+    const countPrefixedLines = (value) => ((value.match(/\n/g) || []).length + 1);
 
     const nextContent = `${content.slice(0, lineStart)}${updatedSegment}${content.slice(safeLineEnd)}`;
-    const startShift = prefix.length * (segment.slice(0, Math.max(0, start - lineStart)).split('\n').length);
-    const endShift = prefix.length * (segment.slice(0, Math.max(0, end - lineStart)).split('\n').length);
+    const startShift = prefix.length * countPrefixedLines(segment.slice(0, Math.max(0, start - lineStart)));
+    const endShift = prefix.length * countPrefixedLines(segment.slice(0, Math.max(0, end - lineStart)));
     const nextStart = start + startShift;
     const nextEnd = end + endShift;
 
