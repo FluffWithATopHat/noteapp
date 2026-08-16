@@ -1,4 +1,5 @@
 import * as Notifications from 'expo-notifications';
+import { AndroidImportance } from 'expo-notifications';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -17,7 +18,7 @@ export async function initializeNotifications() {
 
   await Notifications.setNotificationChannelAsync('note-reminders', {
     name: 'Note reminders',
-    importance: Notifications.AndroidImportance.DEFAULT,
+    importance: AndroidImportance.DEFAULT,
   });
 
   return true;

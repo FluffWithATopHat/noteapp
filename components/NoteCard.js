@@ -9,12 +9,14 @@ function formatDate(dateString) {
 
 export default function NoteCard({ note, onPress, onDelete, onExport }) {
   return (
-    <TouchableOpacity style={styles.container} onPress={onPress}>
-      <Text style={styles.title}>{note.title}</Text>
-      <Text style={styles.content} numberOfLines={3}>
-        {note.content}
-      </Text>
-      <Text style={styles.date}>Created: {formatDate(note.createdAt)}</Text>
+    <View style={styles.container}>
+      <TouchableOpacity onPress={onPress}>
+        <Text style={styles.title}>{note.title}</Text>
+        <Text style={styles.content} numberOfLines={3}>
+          {note.content}
+        </Text>
+        <Text style={styles.date}>Created: {formatDate(note.createdAt)}</Text>
+      </TouchableOpacity>
       <View style={styles.actions}>
         <TouchableOpacity onPress={onExport}>
           <Text style={styles.actionText}>Export</Text>
@@ -23,7 +25,7 @@ export default function NoteCard({ note, onPress, onDelete, onExport }) {
           <Text style={[styles.actionText, styles.deleteText]}>Delete</Text>
         </TouchableOpacity>
       </View>
-    </TouchableOpacity>
+    </View>
   );
 }
 

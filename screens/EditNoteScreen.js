@@ -45,6 +45,7 @@ export default function EditNoteScreen({ route, navigation }) {
         submitLabel="Save Changes"
         loading={loading}
         onSubmit={handleSave}
+        isEditMode
       />
     </View>
   );

@@ -8,6 +8,7 @@ export default function NoteForm({
   submitLabel,
   loading,
   onSubmit,
+  isEditMode = false,
 }) {
   const [title, setTitle] = useState(initialTitle);
   const [content, setContent] = useState(initialContent);
@@ -55,9 +56,9 @@ export default function NoteForm({
       />
 
       <TouchableOpacity
-        style={[styles.button, loading ? styles.buttonDisabled : null]}
+        style={[styles.button, loading || (isEditMode && !hasChanges) ? styles.buttonDisabled : null]}
         onPress={handleSubmit}
-        disabled={loading || !hasChanges}
+        disabled={loading || (isEditMode && !hasChanges)}
       >
         <Text style={styles.buttonText}>{loading ? 'Saving...' : submitLabel}</Text>
       </TouchableOpacity>
