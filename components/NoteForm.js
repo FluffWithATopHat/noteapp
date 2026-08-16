@@ -4,6 +4,10 @@ import { useTheme } from '../context/ThemeContext';
 import { DEFAULT_CONTENT_FONT_SIZE, MAX_CONTENT_FONT_SIZE, MIN_CONTENT_FONT_SIZE } from '../constants/editor';
 import FormattedText from './FormattedText';
 
+function countPrefixedLines(value) {
+  return (value.match(/\n/g) || []).length + 1;
+}
+
 export default function NoteForm({
   initialTitle = '',
   initialContent = '',
@@ -63,7 +67,6 @@ export default function NoteForm({
       .split('\n')
       .map((line) => `${prefix}${line}`)
       .join('\n');
-    const countPrefixedLines = (value) => ((value.match(/\n/g) || []).length + 1);
 
     const nextContent = `${content.slice(0, lineStart)}${updatedSegment}${content.slice(safeLineEnd)}`;
     const startShift = prefix.length * countPrefixedLines(segment.slice(0, Math.max(0, start - lineStart)));
@@ -185,7 +188,7 @@ export default function NoteForm({
         maxLength={5000}
       />
       <Text style={s.hint}>
-        Use the toolbar or type markdown like **bold**, *italic*, # Heading, - list, ~~strike~~, or `code`.
+        Use the toolbar or type markdown like **bold**, *italic*, # Heading, - list, ~~strikethrough~~, or `code`.
       </Text>
 
       <Text style={s.label}>Preview</Text>
