@@ -4,6 +4,12 @@
     "slug": "noteapp",
     "version": "1.0.0",
     "orientation": "portrait",
+    "icon": "./assets/logo.png",
+    "splash": {
+      "image": "./assets/logo.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0D1B2A"
+    },
     "platforms": [
       "android"
     ],
@@ -11,7 +17,11 @@
       "package": "com.fluffwithatophat.noteapp",
       "permissions": [
         "NOTIFICATIONS"
-      ]
+      ],
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/logo.png",
+        "backgroundColor": "#0D1B2A"
+      }
     },
     "plugins": [
       "expo-asset"
