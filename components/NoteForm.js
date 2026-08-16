@@ -1,10 +1,15 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Switch, Platform } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Switch } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
+import FormattedText from './FormattedText';
+
+const MIN_FONT_SIZE = 12;
+const MAX_FONT_SIZE = 28;
 
 export default function NoteForm({
   initialTitle = '',
   initialContent = '',
+  initialContentFontSize = 16,
   initialIsTask = false,
   initialDueAt = '',
   submitLabel,
@@ -15,7 +20,9 @@ export default function NoteForm({
   const { theme } = useTheme();
   const [title, setTitle] = useState(initialTitle);
   const [content, setContent] = useState(initialContent);
+  const [contentFontSize, setContentFontSize] = useState(initialContentFontSize);
   const [isTask, setIsTask] = useState(initialIsTask);
+  const [selection, setSelection] = useState({ start: initialContent.length, end: initialContent.length });
   // Store dueAt as raw ISO string internally; display formatted to user
   const [dueAt, setDueAt] = useState(initialDueAt || '');
   const [dueAtDisplay, setDueAtDisplay] = useState(
@@ -27,10 +34,48 @@ export default function NoteForm({
     () =>
       title.trim() !== initialTitle.trim() ||
       content.trim() !== initialContent.trim() ||
+      contentFontSize !== initialContentFontSize ||
       isTask !== initialIsTask ||
       dueAt !== (initialDueAt || ''),
-    [content, initialContent, initialTitle, title, isTask, initialIsTask, dueAt, initialDueAt],
+    [content, initialContent, contentFontSize, initialContentFontSize, initialTitle, title, isTask, initialIsTask, dueAt, initialDueAt],
   );
+
+  const applyWrappedFormatting = (prefix, suffix = prefix) => {
+    const start = selection.start ?? content.length;
+    const end = selection.end ?? content.length;
+    const selectedText = content.slice(start, end);
+    const replacement = `${prefix}${selectedText}${suffix}`;
+    const nextContent = `${content.slice(0, start)}${replacement}${content.slice(end)}`;
+    const cursorPosition = selectedText ? start + replacement.length : start + prefix.length;
+
+    setContent(nextContent);
+    setSelection({ start: cursorPosition, end: cursorPosition });
+  };
+
+  const applyLinePrefix = (prefix) => {
+    const start = selection.start ?? content.length;
+    const end = selection.end ?? content.length;
+    const lineStart = content.lastIndexOf('\n', start - 1) + 1;
+    const selectedText = content.slice(start, end);
+    const lineEnd = end > start ? end : content.indexOf('\n', start);
+    const safeLineEnd = lineEnd === -1 ? content.length : lineEnd;
+    const segment = content.slice(lineStart, safeLineEnd);
+    const updatedSegment = segment
+      .split('\n')
+      .map((line) => `${prefix}${line}`)
+      .join('\n');
+
+    const nextContent = `${content.slice(0, lineStart)}${updatedSegment}${content.slice(safeLineEnd)}`;
+    const nextStart = lineStart + prefix.length;
+    const nextEnd = nextStart + selectedText.length;
+
+    setContent(nextContent);
+    setSelection({ start: nextStart, end: nextEnd });
+  };
+
+  const changeFontSize = (delta) => {
+    setContentFontSize((current) => Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, current + delta)));
+  };
 
   const parseDueAt = () => {
     // dueAt is stored as ISO or raw user input
@@ -66,7 +111,13 @@ export default function NoteForm({
       }
     }
     setError('');
-    await onSubmit({ title: title.trim(), content: content.trim(), isTask, dueAt: parseDueAt() });
+    await onSubmit({
+      title: title.trim(),
+      content: content.trim(),
+      contentFontSize,
+      isTask,
+      dueAt: parseDueAt(),
+    });
   };
 
   const s = makeStyles(theme);
@@ -86,16 +137,50 @@ export default function NoteForm({
       />
 
       <Text style={s.label}>Content</Text>
+      <View style={s.toolbar}>
+        <TouchableOpacity style={s.toolbarButton} onPress={() => applyWrappedFormatting('**')}>
+          <Text style={s.toolbarButtonText}>Bold</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={s.toolbarButton} onPress={() => applyWrappedFormatting('*')}>
+          <Text style={s.toolbarButtonText}>Italic</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={s.toolbarButton} onPress={() => applyLinePrefix('# ')}>
+          <Text style={s.toolbarButtonText}>H1</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={s.toolbarButton} onPress={() => applyLinePrefix('- ')}>
+          <Text style={s.toolbarButtonText}>List</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={s.toolbarButton} onPress={() => changeFontSize(-2)}>
+          <Text style={s.toolbarButtonText}>A-</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={s.toolbarButton} onPress={() => changeFontSize(2)}>
+          <Text style={s.toolbarButtonText}>A+</Text>
+        </TouchableOpacity>
+      </View>
       <TextInput
         value={content}
         onChangeText={setContent}
-        style={[s.input, s.contentInput]}
+        onSelectionChange={({ nativeEvent }) => setSelection(nativeEvent.selection)}
+        selection={selection}
+        style={[s.input, s.contentInput, { fontSize: contentFontSize, lineHeight: Math.round(contentFontSize * 1.45) }]}
         placeholder="Write your note"
         placeholderTextColor={theme.secondaryText}
         multiline
         textAlignVertical="top"
         maxLength={5000}
       />
+      <Text style={s.hint}>
+        Use the toolbar or type markdown like **bold**, *italic*, # Heading, - list, ~~strike~~, or `code`.
+      </Text>
+
+      <Text style={s.label}>Preview</Text>
+      <View style={s.preview}>
+        <FormattedText
+          content={content || 'Start typing to preview your formatted note.'}
+          fontSize={contentFontSize}
+          style={!content ? { color: theme.secondaryText } : null}
+        />
+      </View>
 
       <View style={s.row}>
         <Text style={s.label}>Mark as Task / Reminder</Text>
@@ -157,6 +242,25 @@ function makeStyles(theme) {
       marginBottom: 12,
       marginTop: -8,
     },
+    toolbar: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+      marginBottom: 10,
+    },
+    toolbarButton: {
+      borderWidth: 1,
+      borderColor: theme.border,
+      backgroundColor: theme.inputBg,
+      borderRadius: 8,
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+    },
+    toolbarButtonText: {
+      color: theme.primaryText,
+      fontWeight: '600',
+      fontSize: 12,
+    },
     input: {
       borderWidth: 1,
       borderColor: theme.border,
@@ -169,6 +273,16 @@ function makeStyles(theme) {
     },
     contentInput: {
       minHeight: 140,
+    },
+    preview: {
+      borderWidth: 1,
+      borderColor: theme.border,
+      borderRadius: 8,
+      backgroundColor: theme.inputBg,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      marginBottom: 14,
+      minHeight: 90,
     },
     row: {
       flexDirection: 'row',
@@ -191,4 +305,3 @@ function makeStyles(theme) {
     },
   });
 }
-

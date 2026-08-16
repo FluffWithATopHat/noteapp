@@ -59,6 +59,7 @@ export default function EditNoteScreen({ route, navigation }) {
       <NoteForm
         initialTitle={note.title}
         initialContent={note.content}
+        initialContentFontSize={note.contentFontSize || 16}
         initialIsTask={note.isTask || false}
         initialDueAt={note.dueAt || ''}
         submitLabel="Save Changes"
