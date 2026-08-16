@@ -21,6 +21,7 @@ export default function NoteForm({
   const [contentFontSize, setContentFontSize] = useState(initialContentFontSize);
   const [isTask, setIsTask] = useState(initialIsTask);
   const [selection, setSelection] = useState({ start: initialContent.length, end: initialContent.length });
+  const [forcedSelection, setForcedSelection] = useState(null);
   // Store dueAt as raw ISO string internally; display formatted to user
   const [dueAt, setDueAt] = useState(initialDueAt || '');
   const [dueAtDisplay, setDueAtDisplay] = useState(
@@ -48,14 +49,15 @@ export default function NoteForm({
 
     setContent(nextContent);
     setSelection({ start: cursorPosition, end: cursorPosition });
+    setForcedSelection({ start: cursorPosition, end: cursorPosition });
   };
 
   const applyLinePrefix = (prefix) => {
     const start = selection.start ?? content.length;
     const end = selection.end ?? content.length;
     const lineStart = content.lastIndexOf('\n', start - 1) + 1;
-    const lineEnd = end > start ? end : content.indexOf('\n', start);
-    const safeLineEnd = lineEnd === -1 ? content.length : lineEnd;
+    const rawLineEnd = content.indexOf('\n', end);
+    const safeLineEnd = rawLineEnd === -1 ? content.length : rawLineEnd;
     const segment = content.slice(lineStart, safeLineEnd);
     const updatedSegment = segment
       .split('\n')
@@ -70,6 +72,7 @@ export default function NoteForm({
 
     setContent(nextContent);
     setSelection({ start: nextStart, end: nextEnd });
+    setForcedSelection({ start: nextStart, end: nextEnd });
   };
 
   const changeFontSize = (delta) => {
@@ -91,6 +94,13 @@ export default function NoteForm({
     // Try to parse and store as ISO; fall back to raw text to allow further editing
     const d = new Date(text.trim());
     setDueAt(!Number.isNaN(d.getTime()) && text.trim() ? d.toISOString() : text.trim());
+  };
+
+  const handleSelectionChange = ({ nativeEvent }) => {
+    setSelection(nativeEvent.selection);
+    if (forcedSelection) {
+      setForcedSelection(null);
+    }
   };
 
   const handleSubmit = async () => {
@@ -159,8 +169,8 @@ export default function NoteForm({
       <TextInput
         value={content}
         onChangeText={setContent}
-        onSelectionChange={({ nativeEvent }) => setSelection(nativeEvent.selection)}
-        selection={selection}
+        onSelectionChange={handleSelectionChange}
+        selection={forcedSelection || undefined}
         style={[s.input, s.contentInput, { fontSize: contentFontSize, lineHeight: Math.round(contentFontSize * 1.45) }]}
         placeholder="Write your note"
         placeholderTextColor={theme.secondaryText}
