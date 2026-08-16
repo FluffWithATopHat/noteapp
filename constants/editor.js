@@ -1,0 +1,3 @@
+export const DEFAULT_CONTENT_FONT_SIZE = 16;
+export const MIN_CONTENT_FONT_SIZE = 12;
+export const MAX_CONTENT_FONT_SIZE = 28;

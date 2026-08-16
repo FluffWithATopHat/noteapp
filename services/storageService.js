@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { DEFAULT_CONTENT_FONT_SIZE } from '../constants/editor';
 
 const NOTES_KEY = '@noteapp:notes';
 
@@ -35,6 +36,7 @@ export async function addNote(noteInput) {
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     title: noteInput.title,
     content: noteInput.content,
+    contentFontSize: noteInput.contentFontSize || DEFAULT_CONTENT_FONT_SIZE,
     isTask: noteInput.isTask || false,
     dueAt: noteInput.dueAt || null,
     completed: false,
@@ -61,6 +63,7 @@ export async function updateNote(noteId, noteInput) {
       ...note,
       title: noteInput.title,
       content: noteInput.content,
+      contentFontSize: noteInput.contentFontSize !== undefined ? noteInput.contentFontSize : note.contentFontSize || DEFAULT_CONTENT_FONT_SIZE,
       isTask: noteInput.isTask !== undefined ? noteInput.isTask : note.isTask,
       dueAt: noteInput.dueAt !== undefined ? noteInput.dueAt : note.dueAt,
       completed: noteInput.completed !== undefined ? noteInput.completed : note.completed,

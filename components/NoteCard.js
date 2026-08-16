@@ -1,6 +1,8 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
+import { DEFAULT_CONTENT_FONT_SIZE } from '../constants/editor';
+import FormattedText from './FormattedText';
 
 function formatDate(dateString) {
   if (!dateString) return null;
@@ -47,9 +49,12 @@ export default function NoteCard({ note, onPress, onDelete, onExport, onToggleCo
         <Text style={[styles.title, { color: note.completed ? theme.secondaryText : theme.primaryText }, note.completed && styles.strikethrough]}>
           {note.title}
         </Text>
-        <Text style={[styles.content, { color: theme.secondaryText }]} numberOfLines={3}>
-          {note.content}
-        </Text>
+        <FormattedText
+          content={note.content}
+          fontSize={note.contentFontSize || DEFAULT_CONTENT_FONT_SIZE}
+          numberOfLines={3}
+          style={[styles.content, { color: theme.secondaryText }]}
+        />
         <Text style={[styles.date, { color: theme.secondaryText }]}>Created: {formatDate(note.createdAt)}</Text>
         {note.dueAt && (
           <Text style={[styles.date, { color: overdue ? theme.danger : theme.secondaryText }]}>
@@ -121,4 +126,3 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 });
-
