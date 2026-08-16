@@ -97,8 +97,13 @@ export default function NoteForm({
   };
 
   const handleSelectionChange = ({ nativeEvent }) => {
-    setSelection(nativeEvent.selection);
-    if (forcedSelection) {
+    const nextSelection = nativeEvent.selection;
+    setSelection(nextSelection);
+    if (
+      forcedSelection &&
+      forcedSelection.start === nextSelection.start &&
+      forcedSelection.end === nextSelection.end
+    ) {
       setForcedSelection(null);
     }
   };

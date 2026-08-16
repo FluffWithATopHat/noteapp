@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { Platform, Text } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 
-const INLINE_TOKEN_REGEX = /(\*\*.+?\*\*|__.+?__|~~.+?~~|\*[^*]+\*|_[^_]+_|`[^`]+`)/;
+const INLINE_MARKERS = ['**', '__', '~~', '`', '*', '_'];
 
 function getLineStyle(baseFontSize, level) {
   const sizeByLevel = {
@@ -40,30 +40,70 @@ function getLineDescriptor(line, baseFontSize) {
   return { text: line, prefix: '', style: getLineStyle(baseFontSize, 0) };
 }
 
-function getInlineStyle(token, theme) {
-  if ((token.startsWith('**') && token.endsWith('**')) || (token.startsWith('__') && token.endsWith('__'))) {
-    return { text: token.slice(2, -2), style: { fontWeight: '700' } };
+function getInlineStyle(marker, theme) {
+  if (marker === '**' || marker === '__') {
+    return { fontWeight: '700' };
   }
 
-  if ((token.startsWith('*') && token.endsWith('*')) || (token.startsWith('_') && token.endsWith('_'))) {
-    return { text: token.slice(1, -1), style: { fontStyle: 'italic' } };
+  if (marker === '*' || marker === '_') {
+    return { fontStyle: 'italic' };
   }
 
-  if (token.startsWith('~~') && token.endsWith('~~')) {
-    return { text: token.slice(2, -2), style: { textDecorationLine: 'line-through' } };
+  if (marker === '~~') {
+    return { textDecorationLine: 'line-through' };
   }
 
-  if (token.startsWith('`') && token.endsWith('`')) {
+  if (marker === '`') {
     return {
-      text: token.slice(1, -1),
-      style: {
-        fontFamily: Platform.select({ ios: 'Courier', android: 'monospace', default: 'monospace' }),
-        backgroundColor: theme.border,
-      },
+      fontFamily: Platform.select({ ios: 'Courier', android: 'monospace', default: 'monospace' }),
+      backgroundColor: theme.border,
     };
   }
 
-  return { text: token, style: null };
+  return null;
+}
+
+function getInlineSegments(text, theme) {
+  const segments = [];
+  let buffer = '';
+  let index = 0;
+
+  const flushBuffer = () => {
+    if (buffer) {
+      segments.push({ text: buffer, style: null });
+      buffer = '';
+    }
+  };
+
+  while (index < text.length) {
+    const marker = INLINE_MARKERS.find((candidate) => text.startsWith(candidate, index));
+
+    if (!marker) {
+      buffer += text[index];
+      index += 1;
+      continue;
+    }
+
+    const markerLength = marker.length;
+    const closeIndex = text.indexOf(marker, index + markerLength);
+
+    if (closeIndex === -1) {
+      buffer += marker;
+      index += markerLength;
+      continue;
+    }
+
+    flushBuffer();
+    segments.push({
+      text: text.slice(index + markerLength, closeIndex),
+      style: getInlineStyle(marker, theme),
+    });
+    index = closeIndex + markerLength;
+  }
+
+  flushBuffer();
+
+  return segments;
 }
 
 export default function FormattedText({ content, fontSize = 16, style, numberOfLines }) {
@@ -75,7 +115,7 @@ export default function FormattedText({ content, fontSize = 16, style, numberOfL
 
     lines.forEach((line, lineIndex) => {
       const { text, prefix, style: lineStyle } = getLineDescriptor(line, fontSize);
-      const segments = text.split(INLINE_TOKEN_REGEX).filter(Boolean);
+      const segments = getInlineSegments(text, theme);
 
       if (lineIndex > 0) {
         nodes.push('\n');
@@ -90,19 +130,13 @@ export default function FormattedText({ content, fontSize = 16, style, numberOfL
       }
 
       if (!segments.length) {
-        nodes.push(
-          <Text key={`line-${lineIndex}`} style={lineStyle}>
-            {' '}
-          </Text>,
-        );
         return;
       }
 
       segments.forEach((segment, segmentIndex) => {
-        const { text: segmentText, style: inlineStyle } = getInlineStyle(segment, theme);
         nodes.push(
-          <Text key={`${lineIndex}-${segmentIndex}`} style={[lineStyle, inlineStyle]}>
-            {segmentText}
+          <Text key={`${lineIndex}-${segmentIndex}`} style={[lineStyle, segment.style]}>
+            {segment.text}
           </Text>,
         );
       });
