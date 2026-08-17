@@ -31,6 +31,10 @@ export async function saveSettings(nextSettings) {
     ...(nextSettings && typeof nextSettings === 'object' ? nextSettings : {}),
   };
 
-  await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(merged));
-  return merged;
+  try {
+    await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(merged));
+    return merged;
+  } catch (error) {
+    throw new Error('Unable to save settings.');
+  }
 }

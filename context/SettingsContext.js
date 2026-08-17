@@ -22,9 +22,13 @@ export function SettingsProvider({ children }) {
   }, []);
 
   const updateSettings = useCallback(async (partialSettings) => {
-    const nextSettings = await saveSettings({ ...settings, ...partialSettings });
-    setSettings(nextSettings);
-    return nextSettings;
+    try {
+      const nextSettings = await saveSettings({ ...settings, ...partialSettings });
+      setSettings(nextSettings);
+      return nextSettings;
+    } catch (error) {
+      return settings;
+    }
   }, [settings]);
 
   const value = useMemo(() => ({ settings, isReady, updateSettings }), [settings, isReady, updateSettings]);

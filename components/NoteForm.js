@@ -62,9 +62,11 @@ function buildCustomDate(dayValue, timeValue) {
 }
 
 function getDefaultCustomParts(dayOptions, timeOptions) {
+  const defaultTime = timeOptions.find((option) => option.value === '09:00')?.value || timeOptions[0]?.value || '';
+
   return {
     day: dayOptions[0]?.value || '',
-    time: timeOptions[9]?.value || timeOptions[0]?.value || '',
+    time: defaultTime,
   };
 }
 
