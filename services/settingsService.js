@@ -6,6 +6,7 @@ export const DEFAULT_SETTINGS = {
   notificationsEnabled: true,
   defaultReminderPreset: 'none',
   showCompletedTasks: true,
+  audioNotesEnabled: false,
 };
 
 export async function getSettings() {

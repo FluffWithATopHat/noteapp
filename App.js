@@ -6,6 +6,7 @@ import AddNoteScreen from './screens/AddNoteScreen';
 import EditNoteScreen from './screens/EditNoteScreen';
 import ArchiveScreen from './screens/ArchiveScreen';
 import SettingsScreen from './screens/SettingsScreen';
+import SearchScreen from './screens/SearchScreen';
 import Header from './components/Header';
 import SplashScreen from './components/SplashScreen';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
@@ -35,6 +36,7 @@ function AppNavigator() {
         <Stack.Screen name="EditNote" component={EditNoteScreen} options={{ title: 'Edit Note' }} />
         <Stack.Screen name="Archive" component={ArchiveScreen} options={{ title: 'Archived Notes' }} />
         <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings' }} />
+        <Stack.Screen name="Search" component={SearchScreen} options={{ title: 'Search Notes' }} />
       </Stack.Navigator>
     </NavigationContainer>
   );
