@@ -72,6 +72,22 @@ export default function SettingsScreen() {
           />
         </View>
       </View>
+
+      <View style={styles.card}>
+        <Text style={styles.sectionTitle}>Audio</Text>
+        <View style={styles.switchRow}>
+          <View style={styles.switchTextWrap}>
+            <Text style={styles.optionText}>Enable voice memo note type</Text>
+            <Text style={styles.helper}>Record audio directly inside a note.</Text>
+          </View>
+          <Switch
+            value={settings.audioNotesEnabled}
+            onValueChange={(value) => updateSettings({ audioNotesEnabled: value })}
+            trackColor={{ false: theme.border, true: theme.primary }}
+            thumbColor={settings.audioNotesEnabled ? theme.primary : theme.secondaryText}
+          />
+        </View>
+      </View>
     </ScrollView>
   );
 }

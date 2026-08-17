@@ -64,8 +64,13 @@ export default function EditNoteScreen({ route, navigation }) {
           initialContent={note.content}
           initialContentFontSize={note.contentFontSize || DEFAULT_CONTENT_FONT_SIZE}
           initialIsTask={note.isTask || false}
+          initialIsChecklist={note.isChecklist || false}
+          initialChecklistItems={note.checklistItems || []}
           initialDueAt={note.dueAt || ''}
           initialReminder={note.reminder || { preset: 'none', remindAt: null }}
+          initialTags={note.tags || []}
+          initialFolder={note.folder || ''}
+          initialAttachments={note.attachments || []}
           submitLabel="Save Changes"
           loading={loading}
           onSubmit={handleSave}

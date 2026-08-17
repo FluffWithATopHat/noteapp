@@ -118,6 +118,23 @@ export default function HomeScreen({ navigation }) {
     }
   };
 
+  const handleToggleChecklistItem = async (note, itemId) => {
+    const updatedItems = note.checklistItems.map((item) =>
+      item.id === itemId ? { ...item, checked: !item.checked } : item,
+    );
+    const allChecked = updatedItems.length > 0 && updatedItems.every((item) => item.checked);
+    try {
+      await updateNote(note.id, {
+        ...note,
+        checklistItems: updatedItems,
+        completed: allChecked ? true : note.completed,
+      });
+      await loadNotes();
+    } catch (err) {
+      Alert.alert('Error', err.message || 'Unable to update checklist.');
+    }
+  };
+
   const handleExportAll = async () => {
     if (!activeNotes.length) {
       Alert.alert('No notes', 'Create a note before exporting.');
@@ -143,11 +160,14 @@ export default function HomeScreen({ navigation }) {
         <TouchableOpacity style={styles.primaryButton} onPress={() => navigation.navigate('AddNote')}>
           <Text style={styles.primaryButtonText}>+ Add Note</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.secondaryButton} onPress={() => navigation.navigate('Archive')}>
-          <Text style={styles.secondaryButtonText}>Archive</Text>
+        <TouchableOpacity style={styles.secondaryButton} onPress={() => navigation.navigate('Search')}>
+          <Text style={styles.secondaryButtonText}>Search</Text>
         </TouchableOpacity>
       </View>
       <View style={styles.row}>
+        <TouchableOpacity style={styles.secondaryButton} onPress={() => navigation.navigate('Archive')}>
+          <Text style={styles.secondaryButtonText}>Archive</Text>
+        </TouchableOpacity>
         <TouchableOpacity style={styles.secondaryButton} onPress={() => navigation.navigate('Settings')}>
           <Text style={styles.secondaryButtonText}>Settings</Text>
         </TouchableOpacity>
@@ -172,6 +192,7 @@ export default function HomeScreen({ navigation }) {
               onDelete={() => handleDelete(item)}
               onToggleComplete={(done) => handleToggleComplete(item, done)}
               onArchiveToggle={() => handleArchiveToggle(item, true)}
+              onToggleChecklistItem={(itemId) => handleToggleChecklistItem(item, itemId)}
               onExport={async () => {
                 try {
                   await exportSingleNote(item);

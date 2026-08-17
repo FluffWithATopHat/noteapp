@@ -1,5 +1,13 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, SectionList, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import NoteCard from '../components/NoteCard';
 import { useTheme } from '../context/ThemeContext';
@@ -8,21 +16,20 @@ import { deleteNote, getNotes, updateNote } from '../services/storageService';
 import { exportSingleNote } from '../services/fileService';
 import { syncNoteNotification } from '../services/notificationService';
 
-export default function ArchiveScreen({ navigation }) {
+export default function SearchScreen({ navigation }) {
   const { theme } = useTheme();
   const { settings } = useSettings();
   const [notes, setNotes] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
   const [query, setQuery] = useState('');
 
   const loadNotes = useCallback(async () => {
     setLoading(true);
-    setError('');
     try {
-      setNotes(await getNotes());
-    } catch (err) {
-      setError(err.message || 'Failed to load archived notes.');
+      const all = await getNotes();
+      setNotes(all.filter((n) => !n.archived));
+    } catch {
+      // silently ignore load errors on search screen
     } finally {
       setLoading(false);
     }
@@ -34,61 +41,30 @@ export default function ArchiveScreen({ navigation }) {
     }, [loadNotes]),
   );
 
-  const archivedNotes = useMemo(() => notes.filter((note) => note.archived), [notes]);
-
-  const filteredNotes = useMemo(() => {
+  const results = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return archivedNotes;
-    return archivedNotes.filter(
-      (n) => n.title.toLowerCase().includes(q) || n.content.toLowerCase().includes(q),
+    if (!q) return [];
+    return notes.filter(
+      (n) =>
+        n.title.toLowerCase().includes(q) ||
+        n.content.toLowerCase().includes(q),
     );
-  }, [archivedNotes, query]);
-
-  const sections = useMemo(() => {
-    const folderMap = {};
-    for (const note of filteredNotes) {
-      const key = note.folder && note.folder.trim() ? note.folder.trim() : 'Uncategorised';
-      if (!folderMap[key]) folderMap[key] = [];
-      folderMap[key].push(note);
-    }
-    return Object.entries(folderMap)
-      .sort(([a], [b]) => {
-        if (a === 'Uncategorised') return 1;
-        if (b === 'Uncategorised') return -1;
-        return a.localeCompare(b);
-      })
-      .map(([title, data]) => ({ title, data }));
-  }, [filteredNotes]);
+  }, [notes, query]);
 
   const styles = makeStyles(theme);
 
-  const handleRestore = async (note) => {
-    try {
-      const updated = await updateNote(note.id, {
-        ...note,
-        archived: false,
-        archivedAt: null,
-        notificationId: null,
-      });
-      const notificationId = await syncNoteNotification(updated, settings).catch(() => null);
-      if (notificationId || updated.notificationId) {
-        await updateNote(note.id, { ...updated, notificationId });
-      }
-      await loadNotes();
-    } catch (err) {
-      Alert.alert('Error', err.message || 'Unable to restore note.');
-    }
-  };
-
   const handleDelete = (note) => {
-    Alert.alert('Delete archived note?', 'This action cannot be undone.', [
+    Alert.alert('Delete note?', 'This action cannot be undone.', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
         style: 'destructive',
         onPress: async () => {
           try {
-            await syncNoteNotification({ ...note, reminder: { preset: 'none', remindAt: null } }, { notificationsEnabled: false });
+            await syncNoteNotification(
+              { ...note, reminder: { preset: 'none', remindAt: null } },
+              { notificationsEnabled: false },
+            );
             await deleteNote(note.id);
             await loadNotes();
           } catch (err) {
@@ -97,6 +73,37 @@ export default function ArchiveScreen({ navigation }) {
         },
       },
     ]);
+  };
+
+  const handleToggleComplete = async (note, completed) => {
+    try {
+      const updated = await updateNote(note.id, { ...note, completed, notificationId: null });
+      const notificationId = await syncNoteNotification(updated, settings).catch(() => null);
+      if (notificationId || updated.notificationId) {
+        await updateNote(note.id, { ...updated, notificationId });
+      }
+      await loadNotes();
+    } catch (err) {
+      Alert.alert('Error', err.message || 'Unable to update note.');
+    }
+  };
+
+  const handleArchiveToggle = async (note) => {
+    try {
+      const updated = await updateNote(note.id, {
+        ...note,
+        archived: true,
+        archivedAt: new Date().toISOString(),
+        notificationId: null,
+      });
+      const notificationId = await syncNoteNotification(updated, settings).catch(() => null);
+      if (notificationId || updated.notificationId) {
+        await updateNote(note.id, { ...updated, notificationId });
+      }
+      await loadNotes();
+    } catch (err) {
+      Alert.alert('Error', err.message || 'Unable to archive note.');
+    }
   };
 
   const handleToggleChecklistItem = async (note, itemId) => {
@@ -116,44 +123,39 @@ export default function ArchiveScreen({ navigation }) {
     }
   };
 
-  if (loading) {
-    return <ActivityIndicator size="large" color={theme.primary} style={styles.loader} />;
-  }
-
-  if (error) {
-    return <Text style={styles.error}>{error}</Text>;
-  }
-
   return (
     <View style={styles.screen}>
       <TextInput
         style={styles.searchInput}
-        placeholder="Search archived notes…"
+        placeholder="Search by title or content…"
         placeholderTextColor={theme.secondaryText}
         value={query}
         onChangeText={setQuery}
+        autoFocus
         returnKeyType="search"
       />
-      {sections.length === 0 ? (
+
+      {loading ? (
+        <ActivityIndicator size="large" color={theme.primary} style={styles.loader} />
+      ) : !query.trim() ? (
         <View style={styles.emptyContainer}>
-          <Text style={styles.empty}>
-            {query.trim() ? `No archived notes match "${query}".` : 'No archived notes yet.'}
-          </Text>
+          <Text style={styles.emptyText}>Type something above to search your notes.</Text>
+        </View>
+      ) : results.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyText}>No notes match "{query}".</Text>
         </View>
       ) : (
-        <SectionList
-          sections={sections}
+        <FlatList
+          data={results}
           keyExtractor={(item) => item.id}
-          renderSectionHeader={({ section }) => (
-            <Text style={styles.sectionTitle}>{section.title}</Text>
-          )}
           renderItem={({ item }) => (
             <NoteCard
               note={item}
-              archivedView
               onPress={() => navigation.navigate('EditNote', { note: item })}
               onDelete={() => handleDelete(item)}
-              onArchiveToggle={() => handleRestore(item)}
+              onToggleComplete={(done) => handleToggleComplete(item, done)}
+              onArchiveToggle={() => handleArchiveToggle(item)}
               onToggleChecklistItem={(itemId) => handleToggleChecklistItem(item, itemId)}
               onExport={async () => {
                 try {
@@ -165,8 +167,7 @@ export default function ArchiveScreen({ navigation }) {
               }}
             />
           )}
-          stickySectionHeadersEnabled={false}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={styles.list}
           keyboardShouldPersistTaps="handled"
         />
       )}
@@ -181,15 +182,6 @@ function makeStyles(theme) {
       backgroundColor: theme.background,
       padding: 16,
     },
-    loader: {
-      flex: 1,
-      backgroundColor: theme.background,
-    },
-    error: {
-      color: theme.danger,
-      fontWeight: '600',
-      padding: 16,
-    },
     searchInput: {
       borderWidth: 1,
       borderColor: theme.border,
@@ -201,23 +193,19 @@ function makeStyles(theme) {
       fontSize: 15,
       marginBottom: 12,
     },
-    sectionTitle: {
-      color: theme.primaryText,
-      fontWeight: '800',
-      fontSize: 15,
-      marginTop: 8,
-      marginBottom: 6,
-    },
-    listContent: {
-      paddingBottom: 16,
+    loader: {
+      marginTop: 30,
     },
     emptyContainer: {
       flex: 1,
       justifyContent: 'center',
     },
-    empty: {
+    emptyText: {
       textAlign: 'center',
       color: theme.secondaryText,
+    },
+    list: {
+      paddingBottom: 16,
     },
   });
 }

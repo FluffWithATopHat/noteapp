@@ -21,6 +21,36 @@ function normalizeReminder(note) {
   };
 }
 
+function normalizeAttachment(a) {
+  if (!a || typeof a !== 'object') return null;
+  if (!['image', 'file', 'link', 'audio'].includes(a.type)) return null;
+  return {
+    id: a.id || `att-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    type: a.type,
+    uri: a.uri || '',
+    name: a.name || '',
+    duration: a.duration || null,
+  };
+}
+
+function normalizeTag(t) {
+  if (!t || typeof t !== 'object') return null;
+  return {
+    id: t.id || `tag-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    label: t.label || '',
+    color: t.color || '#1976D2',
+  };
+}
+
+function normalizeChecklistItem(item) {
+  if (!item || typeof item !== 'object') return null;
+  return {
+    id: item.id || `ci-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    text: item.text || '',
+    checked: !!item.checked,
+  };
+}
+
 function normalizeNote(note) {
   return {
     id: note.id,
@@ -28,6 +58,10 @@ function normalizeNote(note) {
     content: note.content || '',
     contentFontSize: note.contentFontSize || DEFAULT_CONTENT_FONT_SIZE,
     isTask: !!note.isTask,
+    isChecklist: !!note.isChecklist,
+    checklistItems: Array.isArray(note.checklistItems)
+      ? note.checklistItems.map(normalizeChecklistItem).filter(Boolean)
+      : [],
     dueAt: note.dueAt || null,
     completed: !!note.completed,
     archived: !!note.archived,
@@ -38,6 +72,11 @@ function normalizeNote(note) {
     followUpId: note.followUpId || null,
     createdAt: note.createdAt || new Date().toISOString(),
     updatedAt: note.updatedAt || note.createdAt || new Date().toISOString(),
+    tags: Array.isArray(note.tags) ? note.tags.map(normalizeTag).filter(Boolean) : [],
+    folder: note.folder || '',
+    attachments: Array.isArray(note.attachments)
+      ? note.attachments.map(normalizeAttachment).filter(Boolean)
+      : [],
   };
 }
 
@@ -72,12 +111,17 @@ export async function addNote(noteInput) {
     content: noteInput.content,
     contentFontSize: noteInput.contentFontSize || DEFAULT_CONTENT_FONT_SIZE,
     isTask: noteInput.isTask || false,
+    isChecklist: noteInput.isChecklist || false,
+    checklistItems: noteInput.checklistItems || [],
     dueAt: noteInput.dueAt || null,
     completed: false,
     archived: noteInput.archived || false,
     archivedAt: noteInput.archivedAt || null,
     reminder: noteInput.reminder,
     notificationId: noteInput.notificationId || null,
+    tags: noteInput.tags || [],
+    folder: noteInput.folder || '',
+    attachments: noteInput.attachments || [],
     createdAt: now,
     updatedAt: now,
   });
