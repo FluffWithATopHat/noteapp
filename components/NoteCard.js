@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Image, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Audio } from 'expo-av';
 import { useTheme } from '../context/ThemeContext';
@@ -36,6 +36,13 @@ export default function NoteCard({
   const { theme } = useTheme();
   const [playingAudioId, setPlayingAudioId] = useState(null);
   const [soundObj, setSoundObj] = useState(null);
+  const soundRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      soundRef.current?.unloadAsync().catch(() => {});
+    };
+  }, []);
 
   const overdue = note.isTask && !note.completed && isOverdue(note.dueAt);
   const reminderText = formatReminderDate(note.reminder?.remindAt);
@@ -50,19 +57,22 @@ export default function NoteCard({
 
   const playAudio = async (att) => {
     try {
-      if (soundObj) {
-        await soundObj.unloadAsync();
+      if (soundRef.current) {
+        await soundRef.current.unloadAsync();
+        soundRef.current = null;
         setSoundObj(null);
         setPlayingAudioId(null);
         if (playingAudioId === att.id) return;
       }
       const { sound } = await Audio.Sound.createAsync({ uri: att.uri });
+      soundRef.current = sound;
       setSoundObj(sound);
       setPlayingAudioId(att.id);
       await sound.playAsync();
       sound.setOnPlaybackStatusUpdate((status) => {
         if (status.didJustFinish) {
           sound.unloadAsync();
+          soundRef.current = null;
           setSoundObj(null);
           setPlayingAudioId(null);
         }

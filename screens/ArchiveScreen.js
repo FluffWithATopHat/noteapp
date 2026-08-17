@@ -7,6 +7,7 @@ import { useSettings } from '../context/SettingsContext';
 import { deleteNote, getNotes, updateNote } from '../services/storageService';
 import { exportSingleNote } from '../services/fileService';
 import { syncNoteNotification } from '../services/notificationService';
+import { useToggleChecklistItem } from '../hooks/useToggleChecklistItem';
 
 export default function ArchiveScreen({ navigation }) {
   const { theme } = useTheme();
@@ -99,22 +100,7 @@ export default function ArchiveScreen({ navigation }) {
     ]);
   };
 
-  const handleToggleChecklistItem = async (note, itemId) => {
-    const updatedItems = note.checklistItems.map((item) =>
-      item.id === itemId ? { ...item, checked: !item.checked } : item,
-    );
-    const allChecked = updatedItems.length > 0 && updatedItems.every((item) => item.checked);
-    try {
-      await updateNote(note.id, {
-        ...note,
-        checklistItems: updatedItems,
-        completed: allChecked ? true : note.completed,
-      });
-      await loadNotes();
-    } catch (err) {
-      Alert.alert('Error', err.message || 'Unable to update checklist.');
-    }
-  };
+  const handleToggleChecklistItem = useToggleChecklistItem(loadNotes);
 
   if (loading) {
     return <ActivityIndicator size="large" color={theme.primary} style={styles.loader} />;

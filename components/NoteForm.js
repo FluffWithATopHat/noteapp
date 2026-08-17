@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Image,
@@ -264,6 +264,14 @@ export default function NoteForm({
       tags, initialTags, folder, initialFolder, attachments, initialAttachments,
     ],
   );
+
+  // Cleanup recording and timer on unmount
+  useEffect(() => {
+    return () => {
+      clearInterval(durationTimerRef.current);
+      recordingRef.current?.stopAndUnloadAsync().catch(() => {});
+    };
+  }, []);
 
   // ── Text formatting ──────────────────────────────────────────────────────────
   const applyWrappedFormatting = (prefix, suffix = prefix) => {
