@@ -1,8 +1,19 @@
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
+import { formatReminderDate } from './notificationService';
 
 function serializeNote(note) {
-  return [`Title: ${note.title}`, `Created: ${new Date(note.createdAt).toLocaleString()}`, '', note.content].join('\n');
+  return [
+    `Title: ${note.title}`,
+    `Created: ${new Date(note.createdAt).toLocaleString()}`,
+    `Updated: ${new Date(note.updatedAt).toLocaleString()}`,
+    `Type: ${note.isTask ? 'Task' : 'Note'}`,
+    `Archived: ${note.archived ? 'Yes' : 'No'}`,
+    `Due: ${note.dueAt ? new Date(note.dueAt).toLocaleString() : 'None'}`,
+    `Reminder: ${formatReminderDate(note.reminder?.remindAt) || 'None'}`,
+    '',
+    note.content,
+  ].join('\n');
 }
 
 export async function exportSingleNote(note) {

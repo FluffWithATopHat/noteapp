@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { DEFAULT_CONTENT_FONT_SIZE } from '../constants/editor';
 import FormattedText from './FormattedText';
+import { formatReminderDate } from '../services/notificationService';
 
 function formatDate(dateString) {
   if (!dateString) return null;
@@ -15,38 +16,56 @@ function isOverdue(dueAt) {
   return new Date(dueAt) < new Date();
 }
 
-export default function NoteCard({ note, onPress, onDelete, onExport, onToggleComplete }) {
+export default function NoteCard({
+  note,
+  onPress,
+  onDelete,
+  onExport,
+  onToggleComplete,
+  onArchiveToggle,
+  archivedView = false,
+}) {
   const { theme } = useTheme();
 
   const overdue = note.isTask && !note.completed && isOverdue(note.dueAt);
+  const reminderText = formatReminderDate(note.reminder?.remindAt);
 
   return (
-    <View style={[
-      styles.container,
-      {
-        backgroundColor: note.completed ? theme.taskDoneBg : theme.surface,
-        borderColor: overdue ? theme.danger : theme.border,
-      },
-    ]}>
+    <View
+      style={[
+        styles.container,
+        {
+          backgroundColor: note.completed ? theme.taskDoneBg : theme.surface,
+          borderColor: overdue ? theme.danger : theme.border,
+          opacity: note.archived ? 0.9 : 1,
+        },
+      ]}
+    >
       <TouchableOpacity onPress={onPress} activeOpacity={0.7}>
         <View style={styles.titleRow}>
           {note.isTask && (
-            <Text style={[styles.taskBadge, { backgroundColor: theme.primary + '22', color: theme.primary }]}>
-              ✅ Task
-            </Text>
+            <Text style={[styles.taskBadge, { backgroundColor: theme.primary + '22', color: theme.primary }]}>Task</Text>
+          )}
+          {!note.isTask && reminderText && (
+            <Text style={[styles.taskBadge, { backgroundColor: theme.primary + '22', color: theme.primary }]}>Reminder</Text>
           )}
           {overdue && (
-            <Text style={[styles.taskBadge, { backgroundColor: theme.badgeBg, color: theme.badgeText }]}>
-              ⚠️ Overdue
-            </Text>
+            <Text style={[styles.taskBadge, { backgroundColor: theme.badgeBg, color: theme.badgeText }]}>Overdue</Text>
           )}
           {note.completed && (
-            <Text style={[styles.taskBadge, { backgroundColor: theme.taskDoneBg, color: theme.taskDoneText }]}>
-              ✔ Done
-            </Text>
+            <Text style={[styles.taskBadge, { backgroundColor: theme.taskDoneBg, color: theme.taskDoneText }]}>Done</Text>
+          )}
+          {archivedView && (
+            <Text style={[styles.taskBadge, { backgroundColor: theme.border, color: theme.secondaryText }]}>Archived</Text>
           )}
         </View>
-        <Text style={[styles.title, { color: note.completed ? theme.secondaryText : theme.primaryText }, note.completed && styles.strikethrough]}>
+        <Text
+          style={[
+            styles.title,
+            { color: note.completed ? theme.secondaryText : theme.primaryText },
+            note.completed && styles.strikethrough,
+          ]}
+        >
           {note.title}
         </Text>
         <FormattedText
@@ -57,13 +76,14 @@ export default function NoteCard({ note, onPress, onDelete, onExport, onToggleCo
         />
         <Text style={[styles.date, { color: theme.secondaryText }]}>Created: {formatDate(note.createdAt)}</Text>
         {note.dueAt && (
-          <Text style={[styles.date, { color: overdue ? theme.danger : theme.secondaryText }]}>
-            Due: {formatDate(note.dueAt)}
-          </Text>
+          <Text style={[styles.date, { color: overdue ? theme.danger : theme.secondaryText }]}>Due: {formatDate(note.dueAt)}</Text>
+        )}
+        {reminderText && (
+          <Text style={[styles.date, { color: theme.primary }]}>Reminder: {reminderText}</Text>
         )}
       </TouchableOpacity>
       <View style={styles.actions}>
-        {note.isTask && (
+        {note.isTask && !archivedView && (
           <TouchableOpacity onPress={() => onToggleComplete && onToggleComplete(!note.completed)}>
             <Text style={[styles.actionText, { color: note.completed ? theme.secondaryText : theme.taskDoneText }]}>
               {note.completed ? 'Undo' : 'Done'}
@@ -72,6 +92,9 @@ export default function NoteCard({ note, onPress, onDelete, onExport, onToggleCo
         )}
         <TouchableOpacity onPress={onExport}>
           <Text style={[styles.actionText, { color: theme.primary }]}>Export</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={onArchiveToggle}>
+          <Text style={[styles.actionText, { color: theme.primary }]}>{archivedView ? 'Restore' : 'Archive'}</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={onDelete}>
           <Text style={[styles.actionText, { color: theme.danger }]}>Delete</Text>
@@ -120,6 +143,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
     flexDirection: 'row',
     justifyContent: 'flex-end',
+    flexWrap: 'wrap',
     gap: 16,
   },
   actionText: {

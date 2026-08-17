@@ -1,29 +1,26 @@
 import React, { useState } from 'react';
-import { View, Alert, StyleSheet } from 'react-native';
+import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import NoteForm from '../components/NoteForm';
-import { addNote } from '../services/storageService';
-import { scheduleNoteNotifications } from '../services/notificationService';
 import { useTheme } from '../context/ThemeContext';
+import { useSettings } from '../context/SettingsContext';
+import { syncNoteNotification } from '../services/notificationService';
+import { addNote, updateNote } from '../services/storageService';
 
 export default function AddNoteScreen({ navigation }) {
   const { theme } = useTheme();
+  const { settings } = useSettings();
   const [loading, setLoading] = useState(false);
 
   const handleSave = async (noteInput) => {
     setLoading(true);
     try {
-      // Schedule 1-hour reminder + next-day follow-up
-      let reminderId = null;
-      let followUpId = null;
-      try {
-        const ids = await scheduleNoteNotifications(noteInput.title);
-        reminderId = ids.reminderId;
-        followUpId = ids.followUpId;
-      } catch {
-        // Notifications optional — proceed without them
+      const created = await addNote({ ...noteInput, notificationId: null });
+      const notificationId = await syncNoteNotification(created, settings).catch(() => null);
+
+      if (notificationId) {
+        await updateNote(created.id, { ...created, notificationId });
       }
 
-      await addNote({ ...noteInput, reminderId, followUpId });
       Alert.alert('Saved', 'Your note has been created.', [
         {
           text: 'OK',
@@ -38,15 +35,29 @@ export default function AddNoteScreen({ navigation }) {
   };
 
   return (
-    <View style={[styles.screen, { backgroundColor: theme.background }]}>
-      <NoteForm submitLabel="Save Note" loading={loading} onSubmit={handleSave} />
-    </View>
+    <KeyboardAvoidingView
+      style={[styles.screen, { backgroundColor: theme.background }]}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 96 : 0}
+    >
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        <NoteForm
+          submitLabel="Save Note"
+          loading={loading}
+          onSubmit={handleSave}
+          initialReminder={{ preset: settings.defaultReminderPreset, remindAt: null }}
+        />
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
+  },
+  content: {
     padding: 16,
+    paddingBottom: 40,
   },
 });

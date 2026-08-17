@@ -10,6 +10,74 @@ Notifications.setNotificationHandler({
   }),
 });
 
+export const REMINDER_PRESET_OPTIONS = [
+  { value: 'none', label: 'No reminder' },
+  { value: 'oneHour', label: 'In 1 hour' },
+  { value: 'laterToday', label: 'Later today' },
+  { value: 'tomorrowMorning', label: 'Tomorrow morning' },
+  { value: 'custom', label: 'Custom date & time' },
+];
+
+export const DUE_DATE_PRESET_OPTIONS = [
+  { value: 'none', label: 'No due date' },
+  { value: 'laterToday', label: 'Later today' },
+  { value: 'tomorrowMorning', label: 'Tomorrow morning' },
+  { value: 'nextWeek', label: 'Next week' },
+  { value: 'custom', label: 'Custom date & time' },
+];
+
+function setTime(date, hours, minutes = 0) {
+  const next = new Date(date);
+  next.setHours(hours, minutes, 0, 0);
+  return next;
+}
+
+export function getPresetDate(preset) {
+  const now = new Date();
+
+  switch (preset) {
+    case 'oneHour':
+      return new Date(now.getTime() + 60 * 60 * 1000);
+    case 'laterToday': {
+      const evening = setTime(now, 18, 0);
+      return evening > now ? evening : null;
+    }
+    case 'tomorrowMorning': {
+      const tomorrow = new Date(now);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      return setTime(tomorrow, 9, 0);
+    }
+    case 'nextWeek': {
+      const nextWeek = new Date(now);
+      nextWeek.setDate(nextWeek.getDate() + 7);
+      return setTime(nextWeek, 9, 0);
+    }
+    default:
+      return null;
+  }
+}
+
+export function formatReminderDate(dateString) {
+  if (!dateString) {
+    return null;
+  }
+
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return date.toLocaleString();
+}
+
+export function getReminderLabel(reminder) {
+  if (!reminder?.remindAt) {
+    return 'No reminder';
+  }
+
+  return formatReminderDate(reminder.remindAt) || 'No reminder';
+}
+
 export async function initializeNotifications() {
   const { status } = await Notifications.requestPermissionsAsync();
 
@@ -19,86 +87,62 @@ export async function initializeNotifications() {
 
   await Notifications.setNotificationChannelAsync('note-reminders', {
     name: 'Note reminders',
-    importance: AndroidImportance.DEFAULT,
-  });
-
-  await Notifications.setNotificationChannelAsync('note-followup', {
-    name: 'Note follow-up',
     importance: AndroidImportance.HIGH,
   });
 
   return true;
 }
 
-/**
- * Schedule a 1-hour reminder for an incomplete note.
- * Returns the notification identifier.
- */
-export async function scheduleReminder(noteTitle, secondsFromNow = 3600) {
+async function scheduleReminderNotification(note) {
+  const reminderAt = new Date(note?.reminder?.remindAt);
+  if (Number.isNaN(reminderAt.getTime()) || reminderAt <= new Date()) {
+    return null;
+  }
+
+  const seconds = Math.max(1, Math.round((reminderAt.getTime() - Date.now()) / 1000));
+
   return Notifications.scheduleNotificationAsync({
     content: {
-      title: '⏰ Note Reminder',
-      body: `"${noteTitle || 'A note'}" has been sitting for over an hour — don't forget it!`,
-      data: { type: 'reminder' },
+      title: note.isTask ? '⏰ Task Reminder' : '📝 Note Reminder',
+      body: note.isTask
+        ? `Reminder: ${note.title || 'Your task'} is coming up.`
+        : `Reminder: ${note.title || 'Your note'} is ready for you.`,
+      data: {
+        type: note.isTask ? 'task-reminder' : 'note-reminder',
+        noteId: note.id,
+      },
     },
     trigger: {
       channelId: 'note-reminders',
-      seconds: Math.max(1, secondsFromNow),
+      seconds,
     },
   });
 }
 
-/**
- * Schedule a next-day follow-up notification for an incomplete note.
- * Fires at 9 AM the following day.
- */
-export async function scheduleNextDayFollowUp(noteTitle) {
-  const tomorrow9am = new Date();
-  tomorrow9am.setDate(tomorrow9am.getDate() + 1);
-  tomorrow9am.setHours(9, 0, 0, 0);
-  const secondsUntilTomorrow = Math.max(1, Math.round((tomorrow9am - Date.now()) / 1000));
-
-  return Notifications.scheduleNotificationAsync({
-    content: {
-      title: '📌 Unfinished Note',
-      body: `"${noteTitle || 'A note'}" from yesterday is still incomplete. Time to tackle it!`,
-      data: { type: 'followup' },
-    },
-    trigger: {
-      channelId: 'note-followup',
-      seconds: secondsUntilTomorrow,
-    },
-  });
-}
-
-/**
- * Cancel a previously scheduled notification.
- */
 export async function cancelNotification(notificationId) {
   if (notificationId) {
     await Notifications.cancelScheduledNotificationAsync(notificationId);
   }
 }
 
-/**
- * Schedule both the 1-hour reminder and next-day follow-up for a note.
- * Returns { reminderId, followUpId }.
- */
-export async function scheduleNoteNotifications(noteTitle) {
-  const [reminderId, followUpId] = await Promise.all([
-    scheduleReminder(noteTitle, 3600),
-    scheduleNextDayFollowUp(noteTitle),
-  ]);
-  return { reminderId, followUpId };
-}
-
-/**
- * Cancel all notifications for a note.
- */
 export async function cancelNoteNotifications(note) {
   await Promise.all([
+    cancelNotification(note?.notificationId),
     cancelNotification(note?.reminderId),
     cancelNotification(note?.followUpId),
   ]);
 }
 
+export async function syncNoteNotification(note, settings) {
+  await cancelNoteNotifications(note);
+
+  if (!settings?.notificationsEnabled) {
+    return null;
+  }
+
+  if (!note || note.archived || note.completed || !note.reminder?.remindAt) {
+    return null;
+  }
+
+  return scheduleReminderNotification(note);
+}
