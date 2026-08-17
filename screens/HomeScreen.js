@@ -119,14 +119,14 @@ export default function HomeScreen({ navigation }) {
   };
 
   const handleExportAll = async () => {
-    if (!visibleNotes.length) {
+    if (!activeNotes.length) {
       Alert.alert('No notes', 'Create a note before exporting.');
       return;
     }
 
     setBusy(true);
     try {
-      await exportAllNotes(visibleNotes);
+      await exportAllNotes(activeNotes);
       Alert.alert('Success', 'Notes exported successfully.');
     } catch (err) {
       Alert.alert('Export failed', err.message || 'Unable to export notes.');

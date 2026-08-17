@@ -61,30 +61,43 @@ function buildCustomDate(dayValue, timeValue) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
+function getDefaultCustomParts(dayOptions, timeOptions) {
+  return {
+    day: dayOptions[0]?.value || '',
+    time: timeOptions[9]?.value || timeOptions[0]?.value || '',
+  };
+}
+
+function toLocalDayValue(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
 function deriveCustomParts(dateString, dayOptions, timeOptions) {
   if (!dateString) {
-    return {
-      day: dayOptions[0]?.value || '',
-      time: timeOptions[9]?.value || timeOptions[0]?.value || '',
-    };
+    return getDefaultCustomParts(dayOptions, timeOptions);
   }
 
   const date = new Date(dateString);
   if (Number.isNaN(date.getTime())) {
-    return {
-      day: dayOptions[0]?.value || '',
-      time: timeOptions[9]?.value || timeOptions[0]?.value || '',
-    };
+    return getDefaultCustomParts(dayOptions, timeOptions);
   }
 
   return {
-    day: date.toISOString().slice(0, 10),
+    day: toLocalDayValue(date),
     time: `${String(date.getHours()).padStart(2, '0')}:00`,
   };
 }
 
 function resolveReminderPreset(initialReminder) {
   return initialReminder?.preset || 'none';
+}
+
+function getPresetErrorMessage(preset) {
+  if (preset === 'laterToday') {
+    return '"Later today" is no longer available. Choose another option.';
+  }
+
+  return 'Select a future date and time.';
 }
 
 function resolveDateValue({ preset, customDay, customTime, isRequiredFuture = true }) {
@@ -94,7 +107,7 @@ function resolveDateValue({ preset, customDay, customTime, isRequiredFuture = tr
 
   const resolved = preset === 'custom' ? buildCustomDate(customDay, customTime) : getPresetDate(preset);
   if (!resolved) {
-    return { error: 'Select a future date and time.' };
+    return { error: getPresetErrorMessage(preset) };
   }
 
   if (isRequiredFuture && resolved <= new Date()) {
