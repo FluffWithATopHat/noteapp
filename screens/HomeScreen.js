@@ -1,14 +1,24 @@
-import React, { useCallback, useState } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import React, { useCallback, useMemo, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  SectionList,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import NoteCard from '../components/NoteCard';
 import { useTheme } from '../context/ThemeContext';
+import { useSettings } from '../context/SettingsContext';
 import { deleteNote, getNotes, updateNote } from '../services/storageService';
 import { exportAllNotes, exportSingleNote } from '../services/fileService';
-import { cancelNoteNotifications } from '../services/notificationService';
+import { syncNoteNotification } from '../services/notificationService';
 
 export default function HomeScreen({ navigation }) {
   const { theme } = useTheme();
+  const { settings } = useSettings();
   const [notes, setNotes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -33,6 +43,27 @@ export default function HomeScreen({ navigation }) {
     }, [loadNotes]),
   );
 
+  const activeNotes = useMemo(() => notes.filter((note) => !note.archived), [notes]);
+  const visibleNotes = useMemo(
+    () => activeNotes.filter((note) => settings.showCompletedTasks || !note.completed),
+    [activeNotes, settings.showCompletedTasks],
+  );
+  const tasksAndReminders = useMemo(
+    () => visibleNotes.filter((note) => note.isTask || note.reminder?.remindAt),
+    [visibleNotes],
+  );
+  const regularNotes = useMemo(
+    () => visibleNotes.filter((note) => !note.isTask && !note.reminder?.remindAt),
+    [visibleNotes],
+  );
+  const sections = useMemo(
+    () => [
+      { title: 'Tasks & Reminders', data: tasksAndReminders },
+      { title: 'Notes', data: regularNotes },
+    ].filter((section) => section.data.length > 0),
+    [tasksAndReminders, regularNotes],
+  );
+
   const handleDelete = (note) => {
     Alert.alert('Delete note?', 'This action cannot be undone.', [
       { text: 'Cancel', style: 'cancel' },
@@ -41,7 +72,7 @@ export default function HomeScreen({ navigation }) {
         style: 'destructive',
         onPress: async () => {
           try {
-            await cancelNoteNotifications(note);
+            await syncNoteNotification({ ...note, reminder: { preset: 'none', remindAt: null } }, { notificationsEnabled: false });
             await deleteNote(note.id);
             await loadNotes();
           } catch (err) {
@@ -54,12 +85,32 @@ export default function HomeScreen({ navigation }) {
 
   const handleToggleComplete = async (note, completed) => {
     try {
-      if (completed) {
-        // Cancel notifications first (best-effort), then persist the single update
-        try { await cancelNoteNotifications(note); } catch { /* ignored */ }
-        await updateNote(note.id, { ...note, completed, reminderId: null, followUpId: null });
-      } else {
-        await updateNote(note.id, { ...note, completed });
+      const updated = await updateNote(note.id, {
+        ...note,
+        completed,
+        notificationId: null,
+      });
+      const notificationId = await syncNoteNotification(updated, settings).catch(() => null);
+      if (notificationId || updated.notificationId) {
+        await updateNote(note.id, { ...updated, notificationId });
+      }
+      await loadNotes();
+    } catch (err) {
+      Alert.alert('Error', err.message || 'Unable to update note.');
+    }
+  };
+
+  const handleArchiveToggle = async (note, archived) => {
+    try {
+      const updated = await updateNote(note.id, {
+        ...note,
+        archived,
+        archivedAt: archived ? new Date().toISOString() : null,
+        notificationId: null,
+      });
+      const notificationId = archived ? null : await syncNoteNotification(updated, settings).catch(() => null);
+      if (notificationId || updated.notificationId) {
+        await updateNote(note.id, { ...updated, notificationId });
       }
       await loadNotes();
     } catch (err) {
@@ -68,14 +119,14 @@ export default function HomeScreen({ navigation }) {
   };
 
   const handleExportAll = async () => {
-    if (!notes.length) {
+    if (!activeNotes.length) {
       Alert.alert('No notes', 'Create a note before exporting.');
       return;
     }
 
     setBusy(true);
     try {
-      await exportAllNotes(notes);
+      await exportAllNotes(activeNotes);
       Alert.alert('Success', 'Notes exported successfully.');
     } catch (err) {
       Alert.alert('Export failed', err.message || 'Unable to export notes.');
@@ -84,34 +135,43 @@ export default function HomeScreen({ navigation }) {
     }
   };
 
-  const s = makeStyles(theme);
+  const styles = makeStyles(theme);
 
   return (
-    <View style={s.screen}>
-      <View style={s.row}>
-        <TouchableOpacity style={s.primaryButton} onPress={() => navigation.navigate('AddNote')}>
-          <Text style={s.primaryButtonText}>+ Add Note</Text>
+    <View style={styles.screen}>
+      <View style={styles.row}>
+        <TouchableOpacity style={styles.primaryButton} onPress={() => navigation.navigate('AddNote')}>
+          <Text style={styles.primaryButtonText}>+ Add Note</Text>
         </TouchableOpacity>
-
-        <TouchableOpacity style={s.secondaryButton} onPress={handleExportAll} disabled={busy}>
-          <Text style={s.secondaryButtonText}>{busy ? 'Working...' : 'Export All'}</Text>
+        <TouchableOpacity style={styles.secondaryButton} onPress={() => navigation.navigate('Archive')}>
+          <Text style={styles.secondaryButtonText}>Archive</Text>
+        </TouchableOpacity>
+      </View>
+      <View style={styles.row}>
+        <TouchableOpacity style={styles.secondaryButton} onPress={() => navigation.navigate('Settings')}>
+          <Text style={styles.secondaryButtonText}>Settings</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.secondaryButton} onPress={handleExportAll} disabled={busy}>
+          <Text style={styles.secondaryButtonText}>{busy ? 'Working...' : 'Export All'}</Text>
         </TouchableOpacity>
       </View>
 
       {loading ? (
-        <ActivityIndicator size="large" color={theme.primary} style={s.loader} />
+        <ActivityIndicator size="large" color={theme.primary} style={styles.loader} />
       ) : error ? (
-        <Text style={s.error}>{error}</Text>
-      ) : (
-        <FlatList
-          data={notes}
+        <Text style={styles.error}>{error}</Text>
+      ) : sections.length ? (
+        <SectionList
+          sections={sections}
           keyExtractor={(item) => item.id}
+          renderSectionHeader={({ section }) => <Text style={styles.sectionTitle}>{section.title}</Text>}
           renderItem={({ item }) => (
             <NoteCard
               note={item}
               onPress={() => navigation.navigate('EditNote', { note: item })}
               onDelete={() => handleDelete(item)}
               onToggleComplete={(done) => handleToggleComplete(item, done)}
+              onArchiveToggle={() => handleArchiveToggle(item, true)}
               onExport={async () => {
                 try {
                   await exportSingleNote(item);
@@ -122,13 +182,17 @@ export default function HomeScreen({ navigation }) {
               }}
             />
           )}
-          ListEmptyComponent={<Text style={s.empty}>No notes yet. Tap "+ Add Note" to start.</Text>}
-          contentContainerStyle={notes.length === 0 ? s.emptyContainer : undefined}
+          stickySectionHeadersEnabled={false}
+          contentContainerStyle={styles.listContent}
         />
+      ) : (
+        <View style={styles.emptyContainer}>
+          <Text style={styles.empty}>No active notes yet. Tap "+ Add Note" to start.</Text>
+        </View>
       )}
 
-      <View style={s.footer}>
-        <Text style={s.footerText}>by TopHat</Text>
+      <View style={styles.footer}>
+        <Text style={styles.footerText}>by TopHat</Text>
       </View>
     </View>
   );
@@ -144,7 +208,7 @@ function makeStyles(theme) {
     row: {
       flexDirection: 'row',
       justifyContent: 'space-between',
-      marginBottom: 14,
+      marginBottom: 10,
       gap: 8,
     },
     primaryButton: {
@@ -179,8 +243,19 @@ function makeStyles(theme) {
       fontWeight: '600',
       marginTop: 12,
     },
+    listContent: {
+      paddingTop: 4,
+      paddingBottom: 12,
+    },
+    sectionTitle: {
+      color: theme.primaryText,
+      fontWeight: '800',
+      fontSize: 16,
+      marginTop: 8,
+      marginBottom: 8,
+    },
     emptyContainer: {
-      flexGrow: 1,
+      flex: 1,
       justifyContent: 'center',
     },
     empty: {

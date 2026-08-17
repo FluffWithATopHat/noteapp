@@ -1,11 +1,167 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Switch } from 'react-native';
+import {
+  Modal,
+  Pressable,
+  StyleSheet,
+  Switch,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 import { DEFAULT_CONTENT_FONT_SIZE, MAX_CONTENT_FONT_SIZE, MIN_CONTENT_FONT_SIZE } from '../constants/editor';
 import FormattedText from './FormattedText';
+import { DUE_DATE_PRESET_OPTIONS, REMINDER_PRESET_OPTIONS, getPresetDate } from '../services/notificationService';
 
 function countPrefixedLines(value) {
   return (value.match(/\n/g) || []).length + 1;
+}
+
+function formatValueLabel(value, options) {
+  return options.find((option) => option.value === value)?.label || 'Select an option';
+}
+
+function createDayOptions() {
+  const today = new Date();
+  return Array.from({ length: 14 }, (_, index) => {
+    const date = new Date(today);
+    date.setDate(today.getDate() + index);
+    const value = date.toISOString().slice(0, 10);
+    const label = date.toLocaleDateString(undefined, {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+    });
+
+    return { value, label: index === 0 ? `Today (${label})` : index === 1 ? `Tomorrow (${label})` : label };
+  });
+}
+
+function createTimeOptions() {
+  return Array.from({ length: 24 }, (_, hour) => {
+    const labelDate = new Date();
+    labelDate.setHours(hour, 0, 0, 0);
+    return {
+      value: `${String(hour).padStart(2, '0')}:00`,
+      label: labelDate.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
+    };
+  });
+}
+
+function buildCustomDate(dayValue, timeValue) {
+  if (!dayValue || !timeValue) {
+    return null;
+  }
+
+  const [year, month, day] = dayValue.split('-').map(Number);
+  const [hours, minutes] = timeValue.split(':').map(Number);
+  const date = new Date(year, month - 1, day, hours, minutes, 0, 0);
+
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function getDefaultCustomParts(dayOptions, timeOptions) {
+  const defaultTime = timeOptions.find((option) => option.value === '09:00')?.value || timeOptions[0]?.value || '';
+
+  return {
+    day: dayOptions[0]?.value || '',
+    time: defaultTime,
+  };
+}
+
+function toLocalDayValue(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function deriveCustomParts(dateString, dayOptions, timeOptions) {
+  if (!dateString) {
+    return getDefaultCustomParts(dayOptions, timeOptions);
+  }
+
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) {
+    return getDefaultCustomParts(dayOptions, timeOptions);
+  }
+
+  return {
+    day: toLocalDayValue(date),
+    time: `${String(date.getHours()).padStart(2, '0')}:00`,
+  };
+}
+
+function resolveReminderPreset(initialReminder) {
+  return initialReminder?.preset || 'none';
+}
+
+function getPresetErrorMessage(preset) {
+  if (preset === 'laterToday') {
+    return '"Later today" is no longer available. Choose another option.';
+  }
+
+  return 'Select a future date and time.';
+}
+
+function resolveDateValue({ preset, customDay, customTime, isRequiredFuture = true }) {
+  if (preset === 'none') {
+    return null;
+  }
+
+  const resolved = preset === 'custom' ? buildCustomDate(customDay, customTime) : getPresetDate(preset);
+  if (!resolved) {
+    return { error: getPresetErrorMessage(preset) };
+  }
+
+  if (isRequiredFuture && resolved <= new Date()) {
+    return { error: 'Choose a date and time in the future.' };
+  }
+
+  return { value: resolved.toISOString() };
+}
+
+function PickerField({ label, value, options, onPress, theme }) {
+  const styles = makeStyles(theme);
+
+  return (
+    <View style={styles.fieldBlock}>
+      <Text style={styles.label}>{label}</Text>
+      <TouchableOpacity style={styles.selectField} onPress={onPress}>
+        <Text style={[styles.selectFieldText, !value && { color: theme.secondaryText }]}>
+          {value || 'Select an option'}
+        </Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+function OptionPickerModal({ visible, title, options, value, onSelect, onClose, theme }) {
+  const styles = makeStyles(theme);
+
+  return (
+    <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
+      <Pressable style={styles.modalOverlay} onPress={onClose}>
+        <Pressable style={[styles.modalCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          <Text style={[styles.modalTitle, { color: theme.primaryText }]}>{title}</Text>
+          {options.map((option) => (
+            <TouchableOpacity
+              key={option.value}
+              style={[
+                styles.modalOption,
+                value === option.value && { backgroundColor: theme.primary + '18' },
+              ]}
+              onPress={() => {
+                onSelect(option.value);
+                onClose();
+              }}
+            >
+              <Text style={[styles.modalOptionText, { color: theme.primaryText }]}>{option.label}</Text>
+              {value === option.value ? <Text style={{ color: theme.primary }}>✓</Text> : null}
+            </TouchableOpacity>
+          ))}
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
 }
 
 export default function NoteForm({
@@ -14,24 +170,35 @@ export default function NoteForm({
   initialContentFontSize = DEFAULT_CONTENT_FONT_SIZE,
   initialIsTask = false,
   initialDueAt = '',
+  initialReminder = { preset: 'none', remindAt: null },
   submitLabel,
   loading,
   onSubmit,
   isEditMode = false,
 }) {
   const { theme } = useTheme();
+  const dayOptions = useMemo(() => createDayOptions(), []);
+  const timeOptions = useMemo(() => createTimeOptions(), []);
+  const initialDueCustomParts = useMemo(() => deriveCustomParts(initialDueAt, dayOptions, timeOptions), [initialDueAt, dayOptions, timeOptions]);
+  const initialReminderCustomParts = useMemo(
+    () => deriveCustomParts(initialReminder?.remindAt, dayOptions, timeOptions),
+    [initialReminder, dayOptions, timeOptions],
+  );
+
   const [title, setTitle] = useState(initialTitle);
   const [content, setContent] = useState(initialContent);
   const [contentFontSize, setContentFontSize] = useState(initialContentFontSize);
   const [isTask, setIsTask] = useState(initialIsTask);
   const [selection, setSelection] = useState({ start: initialContent.length, end: initialContent.length });
   const [forcedSelection, setForcedSelection] = useState(null);
-  // Store dueAt as raw ISO string internally; display formatted to user
-  const [dueAt, setDueAt] = useState(initialDueAt || '');
-  const [dueAtDisplay, setDueAtDisplay] = useState(
-    initialDueAt ? new Date(initialDueAt).toLocaleString() : '',
-  );
+  const [duePreset, setDuePreset] = useState(initialDueAt ? 'custom' : 'none');
+  const [dueCustomDay, setDueCustomDay] = useState(initialDueCustomParts.day);
+  const [dueCustomTime, setDueCustomTime] = useState(initialDueCustomParts.time);
+  const [reminderPreset, setReminderPreset] = useState(resolveReminderPreset(initialReminder));
+  const [reminderCustomDay, setReminderCustomDay] = useState(initialReminderCustomParts.day);
+  const [reminderCustomTime, setReminderCustomTime] = useState(initialReminderCustomParts.time);
   const [error, setError] = useState('');
+  const [pickerState, setPickerState] = useState(null);
 
   const hasChanges = useMemo(
     () =>
@@ -39,8 +206,32 @@ export default function NoteForm({
       content.trim() !== initialContent.trim() ||
       contentFontSize !== initialContentFontSize ||
       isTask !== initialIsTask ||
-      dueAt !== (initialDueAt || ''),
-    [content, initialContent, contentFontSize, initialContentFontSize, initialTitle, title, isTask, initialIsTask, dueAt, initialDueAt],
+      duePreset !== (initialDueAt ? 'custom' : 'none') ||
+      dueCustomDay !== initialDueCustomParts.day ||
+      dueCustomTime !== initialDueCustomParts.time ||
+      reminderPreset !== resolveReminderPreset(initialReminder) ||
+      reminderCustomDay !== initialReminderCustomParts.day ||
+      reminderCustomTime !== initialReminderCustomParts.time,
+    [
+      content,
+      initialContent,
+      contentFontSize,
+      initialContentFontSize,
+      initialTitle,
+      title,
+      isTask,
+      initialIsTask,
+      duePreset,
+      initialDueAt,
+      dueCustomDay,
+      dueCustomTime,
+      initialDueCustomParts,
+      reminderPreset,
+      initialReminder,
+      reminderCustomDay,
+      reminderCustomTime,
+      initialReminderCustomParts,
+    ],
   );
 
   const applyWrappedFormatting = (prefix, suffix = prefix) => {
@@ -83,34 +274,16 @@ export default function NoteForm({
     setContentFontSize((current) => Math.min(MAX_CONTENT_FONT_SIZE, Math.max(MIN_CONTENT_FONT_SIZE, current + delta)));
   };
 
-  const parseDueAt = () => {
-    // dueAt is stored as ISO or raw user input
-    if (!dueAtDisplay.trim()) return null;
-    // If the stored dueAt is already a valid ISO, return it directly (no round-trip loss)
-    if (dueAt && !Number.isNaN(new Date(dueAt).getTime())) return dueAt;
-    const d = new Date(dueAtDisplay.trim());
-    if (Number.isNaN(d.getTime())) return null;
-    return d.toISOString();
-  };
-
-  const handleDueAtChange = (text) => {
-    setDueAtDisplay(text);
-    // Try to parse and store as ISO; fall back to raw text to allow further editing
-    const d = new Date(text.trim());
-    setDueAt(!Number.isNaN(d.getTime()) && text.trim() ? d.toISOString() : text.trim());
-  };
-
   const handleSelectionChange = ({ nativeEvent }) => {
     const nextSelection = nativeEvent.selection;
     setSelection(nextSelection);
-    if (
-      forcedSelection &&
-      forcedSelection.start === nextSelection.start &&
-      forcedSelection.end === nextSelection.end
-    ) {
+    if (forcedSelection && forcedSelection.start === nextSelection.start && forcedSelection.end === nextSelection.end) {
       setForcedSelection(null);
     }
   };
+
+  const openPicker = (config) => setPickerState(config);
+  const closePicker = () => setPickerState(null);
 
   const handleSubmit = async () => {
     if (!title.trim()) {
@@ -121,58 +294,80 @@ export default function NoteForm({
       setError('Content is required.');
       return;
     }
-    if (isTask && dueAtDisplay.trim()) {
-      const d = new Date(dueAtDisplay.trim());
-      if (Number.isNaN(d.getTime())) {
-        setError('Due date is not valid. Try "MM/DD/YYYY HH:MM" format.');
-        return;
-      }
+
+    const dueResult = isTask
+      ? resolveDateValue({ preset: duePreset, customDay: dueCustomDay, customTime: dueCustomTime })
+      : { value: null };
+    const reminderResult = resolveDateValue({
+      preset: reminderPreset,
+      customDay: reminderCustomDay,
+      customTime: reminderCustomTime,
+    });
+
+    if (dueResult?.error) {
+      setError(`Due date: ${dueResult.error}`);
+      return;
     }
+
+    if (reminderResult?.error) {
+      setError(`Reminder: ${reminderResult.error}`);
+      return;
+    }
+
+    if (isTask && dueResult?.value && reminderResult?.value && new Date(reminderResult.value) > new Date(dueResult.value)) {
+      setError('Reminder should be at or before the due date.');
+      return;
+    }
+
     setError('');
     await onSubmit({
       title: title.trim(),
       content: content.trim(),
       contentFontSize,
       isTask,
-      dueAt: parseDueAt(),
+      dueAt: isTask ? dueResult.value : null,
+      reminder: {
+        preset: reminderPreset,
+        remindAt: reminderResult?.value || null,
+      },
     });
   };
 
-  const s = makeStyles(theme);
+  const styles = makeStyles(theme);
 
   return (
-    <View style={s.container}>
-      {error ? <Text style={s.error}>{error}</Text> : null}
+    <View style={styles.container}>
+      {error ? <Text style={styles.error}>{error}</Text> : null}
 
-      <Text style={s.label}>Title</Text>
+      <Text style={styles.label}>Title</Text>
       <TextInput
         value={title}
         onChangeText={setTitle}
-        style={s.input}
+        style={styles.input}
         placeholder="Enter title"
         placeholderTextColor={theme.secondaryText}
         maxLength={100}
       />
 
-      <Text style={s.label}>Content</Text>
-      <View style={s.toolbar}>
-        <TouchableOpacity style={s.toolbarButton} onPress={() => applyWrappedFormatting('**')}>
-          <Text style={s.toolbarButtonText}>Bold</Text>
+      <Text style={styles.label}>Content</Text>
+      <View style={styles.toolbar}>
+        <TouchableOpacity style={styles.toolbarButton} onPress={() => applyWrappedFormatting('**')}>
+          <Text style={styles.toolbarButtonText}>Bold</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={s.toolbarButton} onPress={() => applyWrappedFormatting('*')}>
-          <Text style={s.toolbarButtonText}>Italic</Text>
+        <TouchableOpacity style={styles.toolbarButton} onPress={() => applyWrappedFormatting('*')}>
+          <Text style={styles.toolbarButtonText}>Italic</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={s.toolbarButton} onPress={() => applyLinePrefix('# ')}>
-          <Text style={s.toolbarButtonText}>H1</Text>
+        <TouchableOpacity style={styles.toolbarButton} onPress={() => applyLinePrefix('# ')}>
+          <Text style={styles.toolbarButtonText}>H1</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={s.toolbarButton} onPress={() => applyLinePrefix('- ')}>
-          <Text style={s.toolbarButtonText}>List</Text>
+        <TouchableOpacity style={styles.toolbarButton} onPress={() => applyLinePrefix('- ')}>
+          <Text style={styles.toolbarButtonText}>List</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={s.toolbarButton} onPress={() => changeFontSize(-2)}>
-          <Text style={s.toolbarButtonText}>A-</Text>
+        <TouchableOpacity style={styles.toolbarButton} onPress={() => changeFontSize(-2)}>
+          <Text style={styles.toolbarButtonText}>A-</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={s.toolbarButton} onPress={() => changeFontSize(2)}>
-          <Text style={s.toolbarButtonText}>A+</Text>
+        <TouchableOpacity style={styles.toolbarButton} onPress={() => changeFontSize(2)}>
+          <Text style={styles.toolbarButtonText}>A+</Text>
         </TouchableOpacity>
       </View>
       <TextInput
@@ -180,19 +375,17 @@ export default function NoteForm({
         onChangeText={setContent}
         onSelectionChange={handleSelectionChange}
         selection={forcedSelection || undefined}
-        style={[s.input, s.contentInput, { fontSize: contentFontSize, lineHeight: Math.round(contentFontSize * 1.45) }]}
+        style={[styles.input, styles.contentInput, { fontSize: contentFontSize, lineHeight: Math.round(contentFontSize * 1.45) }]}
         placeholder="Write your note"
         placeholderTextColor={theme.secondaryText}
         multiline
         textAlignVertical="top"
         maxLength={5000}
       />
-      <Text style={s.hint}>
-        Use the toolbar or type markdown like **bold**, *italic*, # Heading, - list, ~~strikethrough~~, or `code`.
-      </Text>
+      <Text style={styles.hint}>Use the toolbar or type markdown like **bold**, *italic*, # Heading, - list, ~~strikethrough~~, or `code`.</Text>
 
-      <Text style={s.label}>Preview</Text>
-      <View style={s.preview}>
+      <Text style={styles.label}>Preview</Text>
+      <View style={styles.preview}>
         <FormattedText
           content={content || 'Start typing to preview your formatted note.'}
           fontSize={contentFontSize}
@@ -200,8 +393,8 @@ export default function NoteForm({
         />
       </View>
 
-      <View style={s.row}>
-        <Text style={s.label}>Mark as Task / Reminder</Text>
+      <View style={styles.row}>
+        <Text style={styles.label}>Mark as Task</Text>
         <Switch
           value={isTask}
           onValueChange={setIsTask}
@@ -210,27 +403,118 @@ export default function NoteForm({
         />
       </View>
 
-      {isTask && (
+      {isTask ? (
         <>
-          <Text style={s.label}>Due Date (optional)</Text>
-          <TextInput
-            value={dueAtDisplay}
-            onChangeText={handleDueAtChange}
-            style={s.input}
-            placeholder="e.g. 08/20/2026 14:00"
-            placeholderTextColor={theme.secondaryText}
+          <PickerField
+            label="Due Date"
+            value={formatValueLabel(duePreset, DUE_DATE_PRESET_OPTIONS)}
+            options={DUE_DATE_PRESET_OPTIONS}
+            onPress={() => openPicker({
+              title: 'Choose due date',
+              options: DUE_DATE_PRESET_OPTIONS,
+              value: duePreset,
+              onSelect: setDuePreset,
+            })}
+            theme={theme}
           />
-          <Text style={s.hint}>Enter date in any standard format. Leave blank for no due date.</Text>
+          {duePreset === 'custom' ? (
+            <View style={styles.customRow}>
+              <View style={styles.customColumn}>
+                <PickerField
+                  label="Due day"
+                  value={formatValueLabel(dueCustomDay, dayOptions)}
+                  options={dayOptions}
+                  onPress={() => openPicker({
+                    title: 'Choose day',
+                    options: dayOptions,
+                    value: dueCustomDay,
+                    onSelect: setDueCustomDay,
+                  })}
+                  theme={theme}
+                />
+              </View>
+              <View style={styles.customColumn}>
+                <PickerField
+                  label="Due time"
+                  value={formatValueLabel(dueCustomTime, timeOptions)}
+                  options={timeOptions}
+                  onPress={() => openPicker({
+                    title: 'Choose time',
+                    options: timeOptions,
+                    value: dueCustomTime,
+                    onSelect: setDueCustomTime,
+                  })}
+                  theme={theme}
+                />
+              </View>
+            </View>
+          ) : null}
         </>
-      )}
+      ) : null}
+
+      <PickerField
+        label="Reminder"
+        value={formatValueLabel(reminderPreset, REMINDER_PRESET_OPTIONS)}
+        options={REMINDER_PRESET_OPTIONS}
+        onPress={() => openPicker({
+          title: 'Choose reminder',
+          options: REMINDER_PRESET_OPTIONS,
+          value: reminderPreset,
+          onSelect: setReminderPreset,
+        })}
+        theme={theme}
+      />
+      <Text style={styles.hint}>Notes and tasks only notify you when you choose a reminder.</Text>
+      {reminderPreset === 'custom' ? (
+        <View style={styles.customRow}>
+          <View style={styles.customColumn}>
+            <PickerField
+              label="Reminder day"
+              value={formatValueLabel(reminderCustomDay, dayOptions)}
+              options={dayOptions}
+              onPress={() => openPicker({
+                title: 'Choose reminder day',
+                options: dayOptions,
+                value: reminderCustomDay,
+                onSelect: setReminderCustomDay,
+              })}
+              theme={theme}
+            />
+          </View>
+          <View style={styles.customColumn}>
+            <PickerField
+              label="Reminder time"
+              value={formatValueLabel(reminderCustomTime, timeOptions)}
+              options={timeOptions}
+              onPress={() => openPicker({
+                title: 'Choose reminder time',
+                options: timeOptions,
+                value: reminderCustomTime,
+                onSelect: setReminderCustomTime,
+              })}
+              theme={theme}
+            />
+          </View>
+        </View>
+      ) : null}
 
       <TouchableOpacity
-        style={[s.button, loading || (isEditMode && !hasChanges) ? s.buttonDisabled : null]}
+        style={[styles.button, loading || (isEditMode && !hasChanges) ? styles.buttonDisabled : null]}
         onPress={handleSubmit}
         disabled={loading || (isEditMode && !hasChanges)}
       >
-        <Text style={s.buttonText}>{loading ? 'Saving...' : submitLabel}</Text>
+        <Text style={styles.buttonText}>{loading ? 'Saving...' : submitLabel}</Text>
       </TouchableOpacity>
+
+      <OptionPickerModal
+        visible={!!pickerState}
+        title={pickerState?.title}
+        options={pickerState?.options || []}
+        value={pickerState?.value}
+        onSelect={(selectedValue) => pickerState?.onSelect?.(selectedValue)}
+        onClose={closePicker}
+        theme={theme}
+      />
     </View>
   );
 }
@@ -243,6 +527,9 @@ function makeStyles(theme) {
       padding: 16,
       borderWidth: 1,
       borderColor: theme.border,
+    },
+    fieldBlock: {
+      marginBottom: 14,
     },
     error: {
       color: theme.danger,
@@ -292,6 +579,17 @@ function makeStyles(theme) {
     contentInput: {
       minHeight: 140,
     },
+    selectField: {
+      borderWidth: 1,
+      borderColor: theme.border,
+      borderRadius: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 12,
+      backgroundColor: theme.inputBg,
+    },
+    selectFieldText: {
+      color: theme.primaryText,
+    },
     preview: {
       borderWidth: 1,
       borderColor: theme.border,
@@ -308,6 +606,13 @@ function makeStyles(theme) {
       justifyContent: 'space-between',
       marginBottom: 14,
     },
+    customRow: {
+      flexDirection: 'row',
+      gap: 12,
+    },
+    customColumn: {
+      flex: 1,
+    },
     button: {
       backgroundColor: theme.primary,
       borderRadius: 10,
@@ -320,6 +625,37 @@ function makeStyles(theme) {
     buttonText: {
       color: '#FFF',
       fontWeight: '700',
+    },
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.35)',
+      justifyContent: 'center',
+      paddingHorizontal: 20,
+    },
+    modalCard: {
+      borderWidth: 1,
+      borderRadius: 16,
+      maxHeight: '70%',
+      overflow: 'hidden',
+    },
+    modalTitle: {
+      fontSize: 16,
+      fontWeight: '700',
+      paddingHorizontal: 16,
+      paddingTop: 16,
+      paddingBottom: 8,
+    },
+    modalOption: {
+      paddingHorizontal: 16,
+      paddingVertical: 14,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: theme.border,
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+    },
+    modalOptionText: {
+      fontSize: 15,
     },
   });
 }
